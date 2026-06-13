@@ -1,0 +1,51 @@
+@page "/audit"
+@inject ITemporalOperationsService Temporal
+
+<PageTitle>Audit Log - TemporalOps</PageTitle>
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Audit Trail</p>
+        <h1>運用操作の監査ログ</h1>
+        <p>Signal、Cancel、Reset、Terminate、Schedule変更を理由付きで追跡します。</p>
+    </div>
+    <button class="button" @onclick="LoadAsync">更新</button>
+</section>
+
+@if (_audit is null)
+{
+    <section class="loading-card">監査ログを読み込み中...</section>
+}
+else
+{
+    <section class="panel">
+        <div class="audit-list">
+            @foreach (var item in _audit)
+            {
+                <article class="audit-row">
+                    <div class="audit-row__time">
+                        <strong>@item.Timestamp.ToLocalTime().ToString("HH:mm")</strong>
+                        <span>@item.Timestamp.ToLocalTime().ToString("yyyy/MM/dd")</span>
+                    </div>
+                    <div>
+                        <h2>@item.Action</h2>
+                        <p>@item.Reason</p>
+                        <small>@item.Actor → @item.Target</small>
+                    </div>
+                    <StatusBadge Value="@item.Risk" />
+                </article>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private IReadOnlyList<AuditRecord>? _audit;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _audit = await Temporal.GetAuditLogAsync();
+    }
+}

@@ -1,0 +1,61 @@
+@page "/settings"
+@using Microsoft.Extensions.Options
+@using TemporalOpsBlazor.Models
+@inject IOptions<TemporalConnectionSettings> TemporalOptions
+
+<PageTitle>Settings - TemporalOps</PageTitle>
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Connection & Policy</p>
+        <h1>接続・権限ポリシー設定</h1>
+        <p>appsettings.json / 環境変数からTemporal接続先を読み込みます。UseMock=false の場合はTemporal .NET SDKで実データに接続します。</p>
+    </div>
+</section>
+
+<section class="settings-grid">
+    <article class="panel">
+        <div class="panel-header"><h2>Temporal endpoint</h2></div>
+        <div class="form-stack">
+            <label>Mode<input value="@ModeText" readonly /></label>
+            <label>Target Host<input value="@ConnectionSettings.TargetHost" readonly /></label>
+            <label>Namespace<input value="@ConnectionSettings.Namespace" readonly /></label>
+            <label>Identity<input value="@ConnectionSettings.Identity" readonly /></label>
+            <label>TLS<input value="@TlsText" readonly /></label>
+            <label>Task Queues<input value="@TaskQueueText" readonly /></label>
+        </div>
+    </article>
+
+    <article class="panel">
+        <div class="panel-header"><h2>Runtime limits</h2></div>
+        <ul class="policy-list">
+            <li>Workflow list page size: @ConnectionSettings.WorkflowPageSize</li>
+            <li>Dashboard page size: @ConnectionSettings.DashboardPageSize</li>
+            <li>History event limit: @ConnectionSettings.HistoryEventLimit</li>
+            <li>Stuck threshold: @ConnectionSettings.StuckWorkflowMinutes minutes</li>
+        </ul>
+    </article>
+
+    <article class="panel">
+        <div class="panel-header"><h2>Action policy</h2></div>
+        <ul class="policy-list">
+            <li>TerminateとResetはWorkflow IDの確認入力を必須化</li>
+            <li>すべての操作に理由入力とAudit logを付与</li>
+            <li>Critical Riskは本番ではRBAC/承認フロー連携推奨</li>
+            <li>Signal payloadはJSONとして検証し、配列なら複数引数として送信</li>
+        </ul>
+    </article>
+</section>
+
+@code {
+    private TemporalConnectionSettings ConnectionSettings => TemporalOptions.Value;
+    private string ModeText => ConnectionSettings.UseMock ? "Mock / Demo" : "Real Temporal";
+    private string TlsText => ConnectionSettings.Tls.Disabled
+        ? "Disabled"
+        : ConnectionSettings.Tls.Enabled || !string.IsNullOrWhiteSpace(ConnectionSettings.ApiKey) || !string.IsNullOrWhiteSpace(ConnectionSettings.Tls.ClientCertPath)
+            ? "Enabled"
+            : "Default";
+    private string TaskQueueText => ConnectionSettings.MonitoredTaskQueues.Count == 0
+        ? "auto discovery"
+        : string.Join(", ", ConnectionSettings.MonitoredTaskQueues);
+}

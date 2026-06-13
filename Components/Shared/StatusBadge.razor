@@ -1,0 +1,26 @@
+@typeparam TValue
+
+<span class="badge @CssClass">@Value</span>
+
+@code {
+    [Parameter, EditorRequired] public TValue? Value { get; set; }
+
+    private string CssClass => Value?.ToString() switch
+    {
+        "Running" => "badge-running",
+        "Completed" => "badge-success",
+        "Failed" => "badge-danger",
+        "TimedOut" => "badge-warning",
+        "Cancelled" => "badge-muted",
+        "Terminated" => "badge-danger",
+        "ContinuedAsNew" => "badge-info",
+        "Healthy" => "badge-success",
+        "Degraded" => "badge-warning",
+        "Offline" => "badge-danger",
+        "Low" => "badge-success",
+        "Medium" => "badge-info",
+        "High" => "badge-warning",
+        "Critical" => "badge-danger",
+        _ => "badge-muted"
+    };
+}

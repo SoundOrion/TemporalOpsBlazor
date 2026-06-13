@@ -1,0 +1,148 @@
+@if (Workflow is not null)
+{
+    <div class="drawer-backdrop" @onclick="Close"></div>
+    <aside class="action-drawer">
+        <div class="drawer-header">
+            <div>
+                <p class="eyebrow">Operator action</p>
+                <h2>@Workflow.WorkflowId</h2>
+                <span>@Workflow.WorkflowType / <code>@Workflow.RunId</code></span>
+            </div>
+            <button class="icon-button" @onclick="Close" aria-label="Close">×</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Message))
+        {
+            <div class="toast @(Succeeded ? "toast-success" : "toast-error")">@Message</div>
+        }
+
+        <div class="danger-panel">
+            <strong>安全ガード</strong>
+            <p>CancelはWorkflowにクリーンアップの余地を残します。Terminate/Resetは影響が大きいため、理由入力と二段確認を必須にしています。</p>
+        </div>
+
+        <EditForm Model="@this" OnValidSubmit="RunActionAsync">
+            <div class="form-stack">
+                <label>
+                    操作
+                    <select @bind="SelectedAction">
+                        <option value="signal">Signalを送信</option>
+                        <option value="cancel">Cancelを要求</option>
+                        <option value="reset">指定EventからReset</option>
+                        <option value="terminate">Terminate</option>
+                    </select>
+                </label>
+
+                @if (SelectedAction == "signal")
+                {
+                    <label>
+                        Signal名
+                        <input @bind="SignalName" placeholder="refreshInventory" />
+                    </label>
+                    <label>
+                        Payload JSON
+                        <textarea @bind="PayloadJson" rows="5"></textarea>
+                    </label>
+                }
+
+                @if (SelectedAction == "reset")
+                {
+                    <label>
+                        Reset Event ID
+                        <input type="number" @bind="ResetEventId" />
+                    </label>
+                }
+
+                <label>
+                    操作理由 <span class="required">必須</span>
+                    <textarea @bind="Reason" rows="4" placeholder="障害チケット、判断根拠、期待する状態を記録"></textarea>
+                </label>
+
+                @if (SelectedAction is "terminate" or "reset")
+                {
+                    <label>
+                        確認入力
+                        <input @bind="Confirmation" placeholder="@Workflow.WorkflowId を入力" />
+                    </label>
+                }
+
+                <button class="button button-danger" disabled="@IsBusy">@ButtonText</button>
+            </div>
+        </EditForm>
+    </aside>
+}
+
+@code {
+    [Parameter] public WorkflowExecutionSummary? Workflow { get; set; }
+    [Parameter, EditorRequired] public ITemporalOperationsService Service { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string SelectedAction { get; set; } = "signal";
+    private string SignalName { get; set; } = "operatorOverride";
+    private string PayloadJson { get; set; } = "{\n  \"priority\": \"high\",\n  \"note\": \"checked by operator\"\n}";
+    private string Reason { get; set; } = string.Empty;
+    private string Confirmation { get; set; } = string.Empty;
+    private long ResetEventId { get; set; } = 43;
+    private bool IsBusy { get; set; }
+    private string? Message { get; set; }
+    private bool Succeeded { get; set; }
+
+    private string ButtonText => SelectedAction switch
+    {
+        "signal" => "Signalを送信",
+        "cancel" => "Cancelを要求",
+        "reset" => "Resetを実行",
+        "terminate" => "Terminateを実行",
+        _ => "実行"
+    };
+
+    private async Task RunActionAsync()
+    {
+        if (Workflow is null) return;
+        Message = null;
+
+        if (string.IsNullOrWhiteSpace(Reason))
+        {
+            Succeeded = false;
+            Message = "操作理由を入力してください。";
+            return;
+        }
+
+        if (SelectedAction is "terminate" or "reset" && Confirmation != Workflow.WorkflowId)
+        {
+            Succeeded = false;
+            Message = "危険操作の確認入力が一致しません。";
+            return;
+        }
+
+        IsBusy = true;
+        OperationResult result;
+        try
+        {
+            result = SelectedAction switch
+            {
+                "signal" => await Service.SendSignalAsync(Workflow.WorkflowId, Workflow.RunId, SignalName, PayloadJson, Reason),
+                "cancel" => await Service.RequestCancellationAsync(Workflow.WorkflowId, Workflow.RunId, Reason),
+                "reset" => await Service.ResetAsync(Workflow.WorkflowId, Workflow.RunId, ResetEventId, Reason),
+                "terminate" => await Service.TerminateAsync(Workflow.WorkflowId, Workflow.RunId, Reason),
+                _ => OperationResult.Fail("未対応の操作です。")
+            };
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        Succeeded = result.Succeeded;
+        Message = result.Message;
+        if (result.Succeeded)
+        {
+            Reason = string.Empty;
+            Confirmation = string.Empty;
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

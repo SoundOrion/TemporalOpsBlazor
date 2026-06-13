@@ -1,0 +1,50 @@
+@inject NavigationManager Nav
+
+<div class="table-shell">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Workflow</th>
+                <th>Status</th>
+                <th>Risk</th>
+                <th>Task Queue</th>
+                <th>Attempt</th>
+                <th>Pending</th>
+                <th>Latency</th>
+                <th>Owner</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var workflow in Items)
+        {
+            <tr>
+                <td>
+                    <div class="workflow-cell">
+                        <strong>@workflow.WorkflowId</strong>
+                        <span>@workflow.WorkflowType</span>
+                    </div>
+                </td>
+                <td><StatusBadge Value="@workflow.Status" /></td>
+                <td><StatusBadge Value="@workflow.Risk" /></td>
+                <td><code>@workflow.TaskQueue</code></td>
+                <td>@workflow.Attempt</td>
+                <td>@workflow.PendingActivities</td>
+                <td>@workflow.LatencySeconds.ToString("N1")s</td>
+                <td>@workflow.Owner</td>
+                <td class="row-actions">
+                    <button class="button button-ghost" @onclick="() => OpenDetail(workflow)">詳細</button>
+                    <button class="button button-compact" @onclick="() => OnAction.InvokeAsync(workflow)">操作</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<WorkflowExecutionSummary> Items { get; set; } = [];
+    [Parameter] public EventCallback<WorkflowExecutionSummary> OnAction { get; set; }
+
+    private void OpenDetail(WorkflowExecutionSummary workflow) => Nav.NavigateTo($"/workflows/{workflow.WorkflowId}");
+}

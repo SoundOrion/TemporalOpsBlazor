@@ -1,0 +1,121 @@
+@page "/workflows/{WorkflowId}"
+@inject ITemporalOperationsService Temporal
+@inject NavigationManager Nav
+
+<PageTitle>Workflow Detail - TemporalOps</PageTitle>
+
+@if (_detail is null)
+{
+    <section class="empty-state">
+        <p class="eyebrow">Workflow detail</p>
+        <h1>Workflowが見つかりません</h1>
+        <p>Workflow IDを確認してください。</p>
+        <button class="button" @onclick="BackToList">一覧へ戻る</button>
+    </section>
+}
+else
+{
+    var workflow = _detail.Summary;
+    <section class="detail-hero">
+        <div>
+            <p class="eyebrow">Workflow Detail</p>
+            <h1>@workflow.WorkflowId</h1>
+            <div class="detail-tags">
+                <StatusBadge Value="@workflow.Status" />
+                <StatusBadge Value="@workflow.Risk" />
+                <code>@workflow.TaskQueue</code>
+                <span>@workflow.WorkflowType</span>
+            </div>
+        </div>
+        <div class="detail-actions">
+            <button class="button button-ghost" @onclick="BackToList">戻る</button>
+            <button class="button" @onclick="() => _selectedWorkflow = workflow">運用操作</button>
+        </div>
+    </section>
+
+    <section class="detail-grid">
+        <article class="panel">
+            <div class="panel-header"><h2>Execution metadata</h2></div>
+            <dl class="meta-grid">
+                <dt>Run ID</dt><dd><code>@workflow.RunId</code></dd>
+                <dt>Started</dt><dd>@workflow.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd>
+                <dt>Closed</dt><dd>@(workflow.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "-")</dd>
+                <dt>Attempt</dt><dd>@workflow.Attempt</dd>
+                <dt>Pending Activities</dt><dd>@workflow.PendingActivities</dd>
+                <dt>History Length</dt><dd>@workflow.HistoryLength</dd>
+                <dt>Search Attrs</dt><dd>@workflow.SearchAttributes</dd>
+            </dl>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header"><h2>Open Signals</h2></div>
+            <div class="signal-list">
+                @foreach (var signal in _detail.OpenSignals)
+                {
+                    <button class="pill" @onclick="() => StartSignal(signal)">@signal</button>
+                }
+            </div>
+            <p class="muted-text">よく使うSignalをOperator Actionにプリセットできます。</p>
+        </article>
+
+        <article class="panel panel-wide">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">History</p>
+                    <h2>Event timeline</h2>
+                </div>
+            </div>
+            <div class="timeline">
+                @foreach (var history in _detail.History)
+                {
+                    <div class="timeline-item @(history.IsProblem ? "is-problem" : null)">
+                        <span>@history.EventId</span>
+                        <div>
+                            <strong>@history.EventType</strong>
+                            <p>@history.Details</p>
+                            <small>@history.Timestamp.ToLocalTime().ToString("HH:mm:ss")</small>
+                        </div>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header"><h2>Input</h2></div>
+            <pre class="json-box">@_detail.InputJson</pre>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header"><h2>Memo / Runbook</h2></div>
+            <pre class="json-box">@_detail.MemoJson</pre>
+        </article>
+    </section>
+
+    <ActionDrawer Workflow="@_selectedWorkflow" Service="@Temporal" OnClose="CloseActionDrawer" OnChanged="ReloadAsync" />
+}
+
+@code {
+    [Parameter] public string? WorkflowId { get; set; }
+
+    private TemporalOpsBlazor.Models.WorkflowDetail? _detail;
+    private WorkflowExecutionSummary? _selectedWorkflow;
+
+    protected override Task OnParametersSetAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(WorkflowId))
+        {
+            _detail = await Temporal.GetWorkflowAsync(WorkflowId);
+        }
+    }
+
+    private void CloseActionDrawer() => _selectedWorkflow = null;
+
+    private void BackToList() => Nav.NavigateTo("/workflows");
+
+    private void StartSignal(string signalName)
+    {
+        _selectedWorkflow = _detail?.Summary;
+    }
+}

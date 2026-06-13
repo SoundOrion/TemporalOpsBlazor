@@ -1,0 +1,21 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <NavMenu />
+    <main class="content-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Temporal Operations Console</p>
+                <strong>default namespace</strong>
+            </div>
+            <div class="topbar__right">
+                <span class="live-dot"></span>
+                <span>Live telemetry</span>
+                <button class="button button-ghost">Runbook</button>
+            </div>
+        </header>
+        <div class="page-wrap">
+            @Body
+        </div>
+    </main>
+</div>

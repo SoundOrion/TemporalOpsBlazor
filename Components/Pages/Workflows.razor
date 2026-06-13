@@ -1,0 +1,92 @@
+@page "/workflows"
+@inject ITemporalOperationsService Temporal
+
+<PageTitle>Workflows - TemporalOps</PageTitle>
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Workflow Search</p>
+        <h1>Workflow実行を検索・操作</h1>
+        <p>Workflow ID、Run ID、Type、Owner、Search Attributesで絞り込み、運用操作に進めます。</p>
+    </div>
+    <button class="button" @onclick="SearchAsync">再検索</button>
+</section>
+
+<section class="filter-panel">
+    <label>
+        キーワード
+        <input @bind="_query.Keyword" @bind:event="oninput" placeholder="order / provider / workflow id" />
+    </label>
+    <label>
+        Status
+        <select @bind="_statusText">
+            <option value="">All</option>
+            @foreach (var value in Enum.GetValues<WorkflowStatus>())
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+    </label>
+    <label>
+        Task Queue
+        <input @bind="_query.TaskQueue" @bind:event="oninput" placeholder="orders-critical" />
+    </label>
+    <label>
+        Minimum Risk
+        <select @bind="_riskText">
+            <option value="">All</option>
+            @foreach (var value in Enum.GetValues<RiskLevel>())
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+    </label>
+    <button class="button button-compact" @onclick="SearchAsync">検索</button>
+</section>
+
+@if (_items is null)
+{
+    <section class="loading-card">Workflow一覧を読み込み中...</section>
+}
+else if (_items.Count == 0)
+{
+    <section class="empty-state">
+        <h2>該当Workflowはありません</h2>
+        <p>検索条件を緩めるか、Namespace/Task Queueを確認してください。</p>
+    </section>
+}
+else
+{
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Results</p>
+                <h2>@_items.Count 件</h2>
+            </div>
+            <small>危険度順に表示</small>
+        </div>
+        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" />
+    </section>
+}
+
+<ActionDrawer Workflow="@_selectedWorkflow" Service="@Temporal" OnClose="CloseActionDrawer" OnChanged="SearchAsync" />
+
+@code {
+    private WorkflowSearchQuery _query = new();
+    private IReadOnlyList<WorkflowExecutionSummary>? _items;
+    private WorkflowExecutionSummary? _selectedWorkflow;
+    private string _statusText = string.Empty;
+    private string _riskText = string.Empty;
+
+    protected override Task OnInitializedAsync() => SearchAsync();
+
+    private async Task SearchAsync()
+    {
+        _query.Status = Enum.TryParse<WorkflowStatus>(_statusText, out var status) ? status : null;
+        _query.MinimumRisk = Enum.TryParse<RiskLevel>(_riskText, out var risk) ? risk : null;
+        _items = await Temporal.SearchWorkflowsAsync(_query);
+    }
+
+    private void OpenActionDrawer(WorkflowExecutionSummary workflow) => _selectedWorkflow = workflow;
+    private void CloseActionDrawer() => _selectedWorkflow = null;
+}

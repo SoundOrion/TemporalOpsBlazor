@@ -1,0 +1,65 @@
+@page "/workers"
+@inject ITemporalOperationsService Temporal
+
+<PageTitle>Workers - TemporalOps</PageTitle>
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Task Queue Health</p>
+        <h1>WorkerとBacklogを監視</h1>
+        <p>Poller数、Slot利用率、Heartbeat、Backlogから処理能力の偏りを見つけます。</p>
+    </div>
+    <button class="button" @onclick="LoadAsync">更新</button>
+</section>
+
+@if (_workers is null)
+{
+    <section class="loading-card">Worker情報を読み込み中...</section>
+}
+else
+{
+    <section class="worker-grid">
+        @foreach (var worker in _workers)
+        {
+            var percent = worker.SlotsCapacity == 0 ? 0 : (int)Math.Round(worker.SlotsUsed * 100.0 / worker.SlotsCapacity);
+            <article class="worker-card">
+                <div class="worker-card__head">
+                    <div>
+                        <p class="eyebrow">@worker.TaskQueue</p>
+                        <h2>@worker.WorkerId</h2>
+                    </div>
+                    <StatusBadge Value="@worker.Status" />
+                </div>
+                <div class="worker-stats">
+                    <span><strong>@worker.Pollers</strong> pollers</span>
+                    <span><strong>@worker.Backlog</strong> backlog</span>
+                    <span><strong>@percent%</strong> slots</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" style="@($"width:{percent}%")"></div>
+                </div>
+                <footer>
+                    <span>Heartbeat @RelativeTime(worker.LastHeartbeat)</span>
+                    <code>@worker.Version</code>
+                </footer>
+            </article>
+        }
+    </section>
+}
+
+@code {
+    private IReadOnlyList<WorkerSummary>? _workers;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _workers = await Temporal.GetWorkersAsync();
+    }
+
+    private static string RelativeTime(DateTimeOffset time)
+    {
+        var delta = DateTimeOffset.Now - time;
+        return delta.TotalSeconds < 60 ? $"{delta.TotalSeconds:N0}s ago" : $"{delta.TotalMinutes:N0}m ago";
+    }
+}

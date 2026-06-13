@@ -1,0 +1,15 @@
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="@typeof(TemporalOpsBlazor.Components.Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(TemporalOpsBlazor.Components.Layout.MainLayout)">
+            <section class="empty-state">
+                <p class="eyebrow">404</p>
+                <h1>ページが見つかりません</h1>
+                <p>指定されたTemporal運用ビューは存在しません。</p>
+            </section>
+        </LayoutView>
+    </NotFound>
+</Router>

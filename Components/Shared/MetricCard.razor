@@ -1,0 +1,16 @@
+<article class="metric-card @Tone">
+    <div class="metric-card__top">
+        <span>@Label</span>
+        <span class="metric-card__icon">@Icon</span>
+    </div>
+    <strong>@Value</strong>
+    <p>@Caption</p>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string Caption { get; set; } = string.Empty;
+    [Parameter] public string Icon { get; set; } = "•";
+    [Parameter] public string Tone { get; set; } = string.Empty;
+}

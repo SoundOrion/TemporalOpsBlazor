@@ -1,0 +1,92 @@
+@page "/schedules"
+@inject ITemporalOperationsService Temporal
+
+<PageTitle>Schedules - TemporalOps</PageTitle>
+
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Schedules</p>
+        <h1>定期Workflowの運用管理</h1>
+        <p>Pause/Unpauseは監査ログ付きで実行し、Overlap skipの多いScheduleを優先確認します。</p>
+    </div>
+    <button class="button" @onclick="LoadAsync">更新</button>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="toast @(_succeeded ? "toast-success" : "toast-error")">@_message</div>
+}
+
+@if (_schedules is null)
+{
+    <section class="loading-card">Schedule一覧を読み込み中...</section>
+}
+else
+{
+    <section class="panel">
+        <div class="table-shell">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Schedule</th>
+                        <th>Workflow</th>
+                        <th>Cron</th>
+                        <th>Task Queue</th>
+                        <th>Next Run</th>
+                        <th>Overlap</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var schedule in _schedules)
+                    {
+                        <tr>
+                            <td><strong>@schedule.ScheduleId</strong></td>
+                            <td>@schedule.WorkflowType</td>
+                            <td><code>@schedule.Cron</code></td>
+                            <td><code>@schedule.TaskQueue</code></td>
+                            <td>@schedule.NextRunAt.ToLocalTime().ToString("MM/dd HH:mm")</td>
+                            <td>@schedule.OverlapSkipped24h / 24h</td>
+                            <td><span class="badge @(schedule.IsPaused ? "badge-warning" : "badge-success")">@(schedule.IsPaused ? "Paused" : "Active")</span></td>
+                            <td class="row-actions">
+                                @if (schedule.IsPaused)
+                                {
+                                    <button class="button button-compact" @onclick="() => UpdateScheduleAsync(schedule, false)">Unpause</button>
+                                }
+                                else
+                                {
+                                    <button class="button button-ghost" @onclick="() => UpdateScheduleAsync(schedule, true)">Pause</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    private IReadOnlyList<ScheduleSummary>? _schedules;
+    private string? _message;
+    private bool _succeeded;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _schedules = await Temporal.GetSchedulesAsync();
+    }
+
+    private async Task UpdateScheduleAsync(ScheduleSummary schedule, bool pause)
+    {
+        var reason = pause ? "Operational pause from console" : "Operational unpause from console";
+        var result = pause
+            ? await Temporal.PauseScheduleAsync(schedule.ScheduleId, reason)
+            : await Temporal.UnpauseScheduleAsync(schedule.ScheduleId, reason);
+        _succeeded = result.Succeeded;
+        _message = result.Message;
+        await LoadAsync();
+    }
+}
