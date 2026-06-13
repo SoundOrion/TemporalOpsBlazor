@@ -76,19 +76,37 @@
                                     <div class="@ChainRunClass(run)">
                                         <div class="chain-dot"></div>
                                         <div class="chain-run-body">
-                                            <div class="chain-run-top">
-                                                <code>@ShortRunId(run.RunId)</code>
-                                                @if (run.IsCurrent)
-                                                {
-                                                    <span class="current-chip">current</span>
-                                                }
-                                                <StatusBadge Value="@run.Status" />
-                                            </div>
-                                            <div class="chain-run-meta">
-                                                <span>@run.StartedAt.ToLocalTime().ToString("MM/dd HH:mm")</span>
-                                                <span>@(run.ClosedAt?.ToLocalTime().ToString("MM/dd HH:mm") ?? "running")</span>
-                                                <span>history @run.HistoryLength</span>
-                                                <span>@run.LatencySeconds.ToString("N1")s</span>
+                                            <div class="chain-run-grid">
+                                                <div class="chain-run-field chain-run-id-field">
+                                                    <span class="chain-field-label">Run ID</span>
+                                                    <div class="chain-run-idline">
+                                                        <code>@ShortRunId(run.RunId)</code>
+                                                        @if (run.IsCurrent)
+                                                        {
+                                                            <span class="current-chip">current</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="chain-run-field">
+                                                    <span class="chain-field-label">Status</span>
+                                                    <StatusBadge Value="@run.Status" />
+                                                </div>
+                                                <div class="chain-run-field">
+                                                    <span class="chain-field-label">Start Time</span>
+                                                    <strong>@FormatDateTime(run.StartedAt)</strong>
+                                                </div>
+                                                <div class="chain-run-field">
+                                                    <span class="chain-field-label">Close Time</span>
+                                                    <strong>@FormatCloseTime(run)</strong>
+                                                </div>
+                                                <div class="chain-run-field compact-field">
+                                                    <span class="chain-field-label">History</span>
+                                                    <strong>@run.HistoryLength</strong>
+                                                </div>
+                                                <div class="chain-run-field compact-field">
+                                                    <span class="chain-field-label">Latency</span>
+                                                    <strong>@run.LatencySeconds.ToString("N1")s</strong>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -129,6 +147,12 @@
 
     private static string ChainRunClass(WorkflowRunSummary run) =>
         run.IsCurrent ? "chain-run is-current" : "chain-run";
+
+    private static string FormatDateTime(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+
+    private static string FormatCloseTime(WorkflowRunSummary run) =>
+        run.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "running";
 
     private static string ShortRunId(string? runId)
     {

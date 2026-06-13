@@ -72,18 +72,37 @@ else
                     @foreach (var run in _detail.ContinuationRuns.OrderBy(r => r.StartedAt))
                     {
                         <div class="@DetailRunClass(run)">
-                            <div class="detail-run-main">
-                                <strong>@ShortRunId(run.RunId)</strong>
-                                @if (run.IsCurrent)
-                                {
-                                    <span class="current-chip">current</span>
-                                }
-                                <StatusBadge Value="@run.Status" />
-                            </div>
-                            <div class="detail-run-sub">
-                                <span>@run.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</span>
-                                <span>→ @(run.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "running")</span>
-                                <span>history @run.HistoryLength</span>
+                            <div class="detail-run-grid">
+                                <div class="chain-run-field chain-run-id-field">
+                                    <span class="chain-field-label">Run ID</span>
+                                    <div class="chain-run-idline">
+                                        <strong>@ShortRunId(run.RunId)</strong>
+                                        @if (run.IsCurrent)
+                                        {
+                                            <span class="current-chip">current</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="chain-run-field">
+                                    <span class="chain-field-label">Status</span>
+                                    <StatusBadge Value="@run.Status" />
+                                </div>
+                                <div class="chain-run-field">
+                                    <span class="chain-field-label">Start Time</span>
+                                    <strong>@FormatDateTime(run.StartedAt)</strong>
+                                </div>
+                                <div class="chain-run-field">
+                                    <span class="chain-field-label">Close Time</span>
+                                    <strong>@FormatCloseTime(run)</strong>
+                                </div>
+                                <div class="chain-run-field compact-field">
+                                    <span class="chain-field-label">History</span>
+                                    <strong>@run.HistoryLength</strong>
+                                </div>
+                                <div class="chain-run-field compact-field">
+                                    <span class="chain-field-label">Latency</span>
+                                    <strong>@run.LatencySeconds.ToString("N1")s</strong>
+                                </div>
                             </div>
                         </div>
                     }
@@ -154,6 +173,12 @@ else
 
     private static string DetailRunClass(WorkflowRunSummary run) =>
         run.IsCurrent ? "detail-run-node is-current" : "detail-run-node";
+
+    private static string FormatDateTime(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+
+    private static string FormatCloseTime(WorkflowRunSummary run) =>
+        run.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "running";
 
     private static string ShortRunId(string? runId)
     {

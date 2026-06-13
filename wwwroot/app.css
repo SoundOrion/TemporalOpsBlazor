@@ -446,3 +446,70 @@ textarea { padding: 10px 12px; border-radius: 13px; }
 .detail-run-node.is-current { border-color: rgba(117,228,255,.30); background: rgba(117,228,255,.07); }
 .detail-run-main { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .detail-run-sub { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: .86rem; }
+
+/* Continue-As-New chain details: explicit per-run status/start/close metadata */
+.chain-run-grid,
+.detail-run-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, .9fr) minmax(120px, .85fr) minmax(160px, 1fr) minmax(160px, 1fr) minmax(72px, .45fr) minmax(84px, .5fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.chain-run-field {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.chain-field-label {
+    color: var(--muted);
+    font-size: .70rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.chain-run-field strong,
+.chain-run-field code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chain-run-idline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.chain-run-idline code,
+.chain-run-idline strong {
+    display: inline-block;
+    max-width: 120px;
+}
+
+.compact-field {
+    justify-items: start;
+}
+
+.detail-run-node {
+    padding: 12px;
+}
+
+@media (max-width: 1280px) {
+    .chain-run-grid,
+    .detail-run-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .chain-run-grid,
+    .detail-run-grid {
+        grid-template-columns: 1fr;
+    }
+}
