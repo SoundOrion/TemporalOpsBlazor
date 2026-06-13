@@ -76,12 +76,31 @@ public sealed class WorkflowExecutionSummary
     public string Owner { get; set; } = string.Empty;
     public string Memo { get; set; } = string.Empty;
     public string SearchAttributes { get; set; } = string.Empty;
+
+    // Continue-As-New で同じ WorkflowId に連なる Run を、一覧では1つの論理Workflowとして扱う。
+    public int ContinuationRunCount { get; set; } = 1;
+    public IReadOnlyList<WorkflowRunSummary> ContinuationRuns { get; set; } = [];
+    public bool HasContinuationChain => ContinuationRunCount > 1;
+}
+
+public sealed class WorkflowRunSummary
+{
+    public string WorkflowId { get; set; } = string.Empty;
+    public string RunId { get; set; } = string.Empty;
+    public WorkflowStatus Status { get; set; }
+    public string TaskQueue { get; set; } = string.Empty;
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset? ClosedAt { get; set; }
+    public int HistoryLength { get; set; }
+    public decimal LatencySeconds { get; set; }
+    public bool IsCurrent { get; set; }
 }
 
 public sealed class WorkflowDetail
 {
     public WorkflowExecutionSummary Summary { get; set; } = new();
     public IReadOnlyList<WorkflowHistoryEvent> History { get; set; } = [];
+    public IReadOnlyList<WorkflowRunSummary> ContinuationRuns { get; set; } = [];
     public IReadOnlyList<string> OpenSignals { get; set; } = [];
     public string InputJson { get; set; } = "{}";
     public string MemoJson { get; set; } = "{}";

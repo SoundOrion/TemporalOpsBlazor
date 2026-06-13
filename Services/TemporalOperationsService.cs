@@ -113,6 +113,8 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             workflows.Add(await MapWorkflowAsync(workflow, client.Options.Namespace));
         }
 
+        workflows = await GroupContinueAsNewRunsAsync(client, workflows, cancellationToken);
+
         if (query.MinimumRisk is not null)
         {
             workflows = workflows.Where(w => w.Risk >= query.MinimumRisk).ToList();
@@ -159,10 +161,14 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                 history.Add(MapHistoryEvent(ev));
             }
 
+            var continuationRuns = await LoadContinuationRunsAsync(client, workflowId, cancellationToken);
+            summary = BuildContinuationGroup(summary, continuationRuns);
+
             return new TemporalOpsBlazor.Models.WorkflowDetail
             {
                 Summary = summary,
                 History = history,
+                ContinuationRuns = summary.ContinuationRuns,
                 OpenSignals = GuessSignals(history),
                 InputJson = inputJson,
                 MemoJson = await FormatMemoAsync(description.Memo),
@@ -424,6 +430,156 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         }
     }
 
+    private async Task<List<WorkflowExecutionSummary>> GroupContinueAsNewRunsAsync(
+        TemporalClient client,
+        IReadOnlyList<WorkflowExecutionSummary> workflows,
+        CancellationToken cancellationToken)
+    {
+        if (workflows.Count == 0)
+        {
+            return [];
+        }
+
+        var grouped = new List<WorkflowExecutionSummary>();
+        var seenWorkflowIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var seed in workflows.OrderByDescending(w => w.StartedAt))
+        {
+            if (!seenWorkflowIds.Add(seed.WorkflowId))
+            {
+                continue;
+            }
+
+            var runs = await LoadContinuationRunsAsync(client, seed.WorkflowId, cancellationToken);
+            if (runs.Count == 0)
+            {
+                runs = [ToRunSummary(seed, true)];
+            }
+
+            grouped.Add(BuildContinuationGroup(seed, runs));
+        }
+
+        return grouped;
+    }
+
+    private async Task<IReadOnlyList<WorkflowRunSummary>> LoadContinuationRunsAsync(
+        TemporalClient client,
+        string workflowId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(workflowId))
+        {
+            return [];
+        }
+
+        var runs = new List<WorkflowRunSummary>();
+        var query = $"WorkflowId = \"{EscapeVisibilityValue(workflowId)}\"";
+        var limit = Math.Max(10, Math.Min(Math.Max(1, _settings.WorkflowPageSize), 250));
+
+        try
+        {
+            await foreach (var workflow in client.ListWorkflowsAsync(
+                query,
+                new WorkflowListOptions
+                {
+                    Limit = limit,
+                    Rpc = Rpc(cancellationToken),
+                }).WithCancellation(cancellationToken))
+            {
+                var summary = await MapWorkflowAsync(workflow, client.Options.Namespace);
+                runs.Add(ToRunSummary(summary, false));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Failed to hydrate Continue-As-New chain for {WorkflowId}", workflowId);
+        }
+
+        var ordered = runs
+            .GroupBy(r => r.RunId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(r => r.StartedAt).First())
+            .OrderByDescending(r => r.StartedAt)
+            .ToList();
+
+        if (ordered.Count > 0)
+        {
+            var current = ChooseCurrentRun(ordered);
+            foreach (var run in ordered)
+            {
+                run.IsCurrent = string.Equals(run.RunId, current.RunId, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return ordered;
+    }
+
+    private static WorkflowExecutionSummary BuildContinuationGroup(
+        WorkflowExecutionSummary seed,
+        IReadOnlyList<WorkflowRunSummary> runs)
+    {
+        var ordered = runs.Count == 0
+            ? new List<WorkflowRunSummary> { ToRunSummary(seed, true) }
+            : runs.OrderByDescending(r => r.StartedAt).ToList();
+
+        var current = ChooseCurrentRun(ordered);
+        foreach (var run in ordered)
+        {
+            run.IsCurrent = string.Equals(run.RunId, current.RunId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var groupStartedAt = ordered.Min(r => r.StartedAt);
+        DateTimeOffset? groupClosedAt = ordered.Any(r => r.ClosedAt is null)
+            ? (DateTimeOffset?)null
+            : ordered.Max(r => r.ClosedAt);
+        var groupLatency = groupClosedAt is null
+            ? DateTimeOffset.UtcNow - groupStartedAt
+            : groupClosedAt.Value - groupStartedAt;
+
+        return new WorkflowExecutionSummary
+        {
+            WorkflowId = seed.WorkflowId,
+            RunId = current.RunId,
+            WorkflowType = seed.WorkflowType,
+            Status = current.Status,
+            TaskQueue = string.IsNullOrWhiteSpace(current.TaskQueue) ? seed.TaskQueue : current.TaskQueue,
+            Namespace = seed.Namespace,
+            StartedAt = groupStartedAt,
+            ClosedAt = groupClosedAt,
+            Attempt = ordered.Count,
+            PendingActivities = seed.PendingActivities,
+            HistoryLength = ordered.Sum(r => r.HistoryLength),
+            LatencySeconds = (decimal)Math.Max(0, groupLatency.TotalSeconds),
+            Risk = ordered.Select(r => CalculateRisk(r.Status, r.StartedAt, r.HistoryLength)).Append(seed.Risk).Max(),
+            Owner = seed.Owner,
+            Memo = seed.Memo,
+            SearchAttributes = seed.SearchAttributes,
+            ContinuationRunCount = ordered.Count,
+            ContinuationRuns = ordered,
+        };
+    }
+
+    private static WorkflowRunSummary ChooseCurrentRun(IReadOnlyList<WorkflowRunSummary> runs)
+    {
+        return runs
+            .OrderByDescending(r => r.Status == OpsWorkflowStatus.Running)
+            .ThenByDescending(r => r.Status != OpsWorkflowStatus.ContinuedAsNew)
+            .ThenByDescending(r => r.StartedAt)
+            .First();
+    }
+
+    private static WorkflowRunSummary ToRunSummary(WorkflowExecutionSummary summary, bool isCurrent) => new()
+    {
+        WorkflowId = summary.WorkflowId,
+        RunId = summary.RunId,
+        Status = summary.Status,
+        TaskQueue = summary.TaskQueue,
+        StartedAt = summary.StartedAt,
+        ClosedAt = summary.ClosedAt,
+        HistoryLength = summary.HistoryLength,
+        LatencySeconds = summary.LatencySeconds,
+        IsCurrent = isCurrent,
+    };
+
     private async Task<WorkflowExecutionSummary> MapWorkflowAsync(ClientWorkflowExecution workflow, string ns)
     {
         var status = MapStatus(workflow.Status);
@@ -433,7 +589,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         var memoJson = await FormatMemoAsync(workflow.Memo);
         var searchAttrs = workflow.TypedSearchAttributes?.ToString() ?? string.Empty;
 
-        return new WorkflowExecutionSummary
+        var summary = new WorkflowExecutionSummary
         {
             WorkflowId = workflow.Id,
             RunId = workflow.RunId,
@@ -451,7 +607,11 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             Owner = ExtractOwner(searchAttrs, memoJson),
             Memo = memoJson,
             SearchAttributes = string.IsNullOrWhiteSpace(searchAttrs) ? "-" : searchAttrs,
+            ContinuationRunCount = 1,
         };
+
+        summary.ContinuationRuns = [ToRunSummary(summary, true)];
+        return summary;
     }
 
     private WorkflowHistoryEvent MapHistoryEvent(HistoryEvent ev)

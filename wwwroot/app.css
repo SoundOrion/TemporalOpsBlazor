@@ -417,3 +417,32 @@ textarea { padding: 10px 12px; border-radius: 13px; }
     .detail-hero,
     .page-heading { padding: 16px; }
 }
+
+/* Continue-As-New grouping */
+.workflow-group-table .has-chain { background: rgba(117, 228, 255, .025); }
+.workflow-cell-with-toggle { display: flex; align-items: flex-start; gap: 10px; }
+.workflow-cell-main { min-width: 0; display: grid; gap: 3px; }
+.chain-toggle { width: 26px; height: 26px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 9px; background: rgba(255,255,255,.055); color: var(--text); cursor: pointer; }
+.chain-toggle span { display: inline-block; transform: rotate(-90deg); transition: transform .16s ease; }
+.chain-toggle span.is-open { transform: rotate(0deg); }
+.chain-note { color: var(--muted); font-size: .78rem; }
+.chain-badge { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; border: 1px solid rgba(117,228,255,.28); border-radius: 999px; background: rgba(117,228,255,.10); color: var(--accent); font-weight: 800; white-space: nowrap; cursor: pointer; }
+.chain-detail-row td { padding-top: 0; background: rgba(6,12,28,.46); }
+.chain-detail { border: 1px solid var(--border); border-radius: 16px; padding: 14px; background: rgba(0,0,0,.18); }
+.chain-detail-header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.chain-detail-header span { color: var(--muted); font-size: .86rem; }
+.chain-timeline { display: grid; gap: 10px; }
+.chain-run { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start; }
+.chain-run:not(:last-child)::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: -10px; width: 2px; background: linear-gradient(180deg, rgba(117,228,255,.45), rgba(143,125,255,.18)); }
+.chain-dot { width: 18px; height: 18px; border-radius: 999px; border: 1px solid rgba(117,228,255,.42); background: rgba(117,228,255,.16); box-shadow: 0 0 18px rgba(117,228,255,.12); }
+.chain-run.is-current .chain-dot { background: var(--accent); box-shadow: 0 0 20px rgba(117,228,255,.35); }
+.chain-run-body { min-width: 0; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.04); }
+.chain-run.is-current .chain-run-body { border-color: rgba(117,228,255,.28); background: rgba(117,228,255,.07); }
+.chain-run-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chain-run-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; color: var(--muted); font-size: .84rem; }
+.current-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; background: rgba(90,255,178,.12); color: var(--ok); border: 1px solid rgba(90,255,178,.26); font-size: .74rem; font-weight: 800; }
+.detail-run-chain { display: grid; gap: 10px; }
+.detail-run-node { padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,.04); }
+.detail-run-node.is-current { border-color: rgba(117,228,255,.30); background: rgba(117,228,255,.07); }
+.detail-run-main { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.detail-run-sub { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: .86rem; }

@@ -121,3 +121,9 @@ export Temporal__Tls__ClientPrivateKeyPath='/secure/client.key'
 - Runbook URL、Incident ticket、PagerDutyなどの外部連携
 
 本番ではUIからTemporalへ直接接続せず、RBAC・監査・承認・Rate limitを備えたBackend APIを挟む構成も検討してください。
+
+## v5: Continue-As-New grouping
+
+Workflow一覧では、同じ `WorkflowId` を持つ複数Runを Continue-As-New chain として1行に集約します。
+行の `ContinueAsNew × N` を開くと古いRunから現在Runまでのタイムラインを表示し、詳細画面にもRun chainを表示します。
+運用操作は、集約行の current run に対して実行されます。

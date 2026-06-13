@@ -58,6 +58,39 @@ else
             <p class="muted-text">よく使うSignalをOperator Actionにプリセットできます。</p>
         </article>
 
+        @if (_detail.ContinuationRuns.Count > 1)
+        {
+            <article class="panel panel-wide">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">Continue-As-New</p>
+                        <h2>Run chainを1つのWorkflowとして表示</h2>
+                    </div>
+                    <span class="chain-badge">@_detail.ContinuationRuns.Count runs</span>
+                </div>
+                <div class="detail-run-chain">
+                    @foreach (var run in _detail.ContinuationRuns.OrderBy(r => r.StartedAt))
+                    {
+                        <div class="@DetailRunClass(run)">
+                            <div class="detail-run-main">
+                                <strong>@ShortRunId(run.RunId)</strong>
+                                @if (run.IsCurrent)
+                                {
+                                    <span class="current-chip">current</span>
+                                }
+                                <StatusBadge Value="@run.Status" />
+                            </div>
+                            <div class="detail-run-sub">
+                                <span>@run.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</span>
+                                <span>→ @(run.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "running")</span>
+                                <span>history @run.HistoryLength</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </article>
+        }
+
         <article class="panel panel-wide">
             <div class="panel-header">
                 <div>
@@ -117,5 +150,18 @@ else
     private void StartSignal(string signalName)
     {
         _selectedWorkflow = _detail?.Summary;
+    }
+
+    private static string DetailRunClass(WorkflowRunSummary run) =>
+        run.IsCurrent ? "detail-run-node is-current" : "detail-run-node";
+
+    private static string ShortRunId(string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId))
+        {
+            return "-";
+        }
+
+        return runId.Length <= 8 ? runId : runId[..8];
     }
 }

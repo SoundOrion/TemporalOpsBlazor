@@ -17,6 +17,8 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         _workflows =
         [
             new() { WorkflowId = "order-20260613-10425", RunId = "2f4d9a91-7ba5-4d52", WorkflowType = "OrderFulfillmentWorkflow", Status = WorkflowStatus.Running, TaskQueue = "orders-critical", StartedAt = now.AddMinutes(-46), Attempt = 1, PendingActivities = 2, HistoryLength = 824, LatencySeconds = 192.4m, Risk = RiskLevel.High, Owner = "commerce", Memo = "VIP order, inventory reservation pending", SearchAttributes = "customerTier=VIP, region=JP" },
+            new() { WorkflowId = "order-20260613-10425", RunId = "b43d11d0-44bb-4f09", WorkflowType = "OrderFulfillmentWorkflow", Status = WorkflowStatus.ContinuedAsNew, TaskQueue = "orders-critical", StartedAt = now.AddHours(-3), ClosedAt = now.AddMinutes(-47), Attempt = 1, PendingActivities = 0, HistoryLength = 4981, LatencySeconds = 7998.0m, Risk = RiskLevel.Medium, Owner = "commerce", Memo = "ContinueAsNew: history compaction", SearchAttributes = "customerTier=VIP, region=JP" },
+            new() { WorkflowId = "order-20260613-10425", RunId = "0c6c5988-0252-4dd3", WorkflowType = "OrderFulfillmentWorkflow", Status = WorkflowStatus.ContinuedAsNew, TaskQueue = "orders-critical", StartedAt = now.AddHours(-5), ClosedAt = now.AddHours(-3).AddMinutes(-1), Attempt = 1, PendingActivities = 0, HistoryLength = 5022, LatencySeconds = 7140.0m, Risk = RiskLevel.Medium, Owner = "commerce", Memo = "ContinueAsNew: daily order slice", SearchAttributes = "customerTier=VIP, region=JP" },
             new() { WorkflowId = "payment-reconcile-nightly", RunId = "98fc9231-0cb8-4bb7", WorkflowType = "PaymentReconciliationWorkflow", Status = WorkflowStatus.Failed, TaskQueue = "payments-batch", StartedAt = now.AddHours(-3), ClosedAt = now.AddHours(-2).AddMinutes(-44), Attempt = 5, PendingActivities = 0, HistoryLength = 1412, LatencySeconds = 587.1m, Risk = RiskLevel.Critical, Owner = "finance", Memo = "Provider timeout after retry exhaustion", SearchAttributes = "provider=AcmePay, severity=critical" },
             new() { WorkflowId = "invoice-archiver-2026-06-13", RunId = "a531255d-8f1f-447b", WorkflowType = "InvoiceArchivalWorkflow", Status = WorkflowStatus.Running, TaskQueue = "backoffice", StartedAt = now.AddHours(-1).AddMinutes(-18), Attempt = 2, PendingActivities = 1, HistoryLength = 411, LatencySeconds = 71.8m, Risk = RiskLevel.Medium, Owner = "billing", Memo = "Storage upload throttling observed", SearchAttributes = "tenant=global" },
             new() { WorkflowId = "subscription-renewal-jp-0613", RunId = "f71f54f8-6715-4594", WorkflowType = "SubscriptionRenewalWorkflow", Status = WorkflowStatus.Running, TaskQueue = "subscriptions", StartedAt = now.AddMinutes(-24), Attempt = 1, PendingActivities = 0, HistoryLength = 182, LatencySeconds = 24.5m, Risk = RiskLevel.Low, Owner = "growth", Memo = "Healthy", SearchAttributes = "market=JP" },
@@ -54,17 +56,19 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
     {
         lock (_sync)
         {
+            var groupedWorkflows = GroupContinuationRuns(_workflows);
+
             var snapshot = new TemporalDashboardSnapshot
             {
                 Namespace = "default",
                 UpdatedAt = DateTimeOffset.Now,
-                RunningWorkflows = _workflows.Count(x => x.Status == WorkflowStatus.Running),
-                FailedWorkflows24h = _workflows.Count(x => x.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut),
-                StuckWorkflows = _workflows.Count(x => x.Status == WorkflowStatus.Running && x.LatencySeconds > 180),
+                RunningWorkflows = groupedWorkflows.Count(x => x.Status == WorkflowStatus.Running),
+                FailedWorkflows24h = groupedWorkflows.Count(x => x.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut),
+                StuckWorkflows = groupedWorkflows.Count(x => x.Status == WorkflowStatus.Running && x.LatencySeconds > 180),
                 ActiveWorkers = _workers.Count(x => x.Status != WorkerStatus.Offline),
                 CompletionRate = 98.72m,
                 P95LatencySeconds = 87.4m,
-                HotWorkflows = _workflows.OrderByDescending(x => x.Risk).ThenByDescending(x => x.LatencySeconds).Take(5).ToList(),
+                HotWorkflows = groupedWorkflows.OrderByDescending(x => x.Risk).ThenByDescending(x => x.LatencySeconds).Take(5).ToList(),
                 Workers = _workers.ToList(),
                 Schedules = _schedules.ToList(),
                 RecentAudit = _audit.OrderByDescending(x => x.Timestamp).Take(5).ToList(),
@@ -106,7 +110,9 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
                 result = result.Where(x => x.Risk >= query.MinimumRisk.Value);
             }
 
-            return Task.FromResult<IReadOnlyList<WorkflowExecutionSummary>>(result
+            var grouped = GroupContinuationRuns(result);
+
+            return Task.FromResult<IReadOnlyList<WorkflowExecutionSummary>>(grouped
                 .OrderByDescending(x => x.Risk)
                 .ThenByDescending(x => x.StartedAt)
                 .ToList());
@@ -126,9 +132,13 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
                 return Task.FromResult<WorkflowDetail?>(null);
             }
 
+            var groupedSummary = GroupContinuationRuns(_workflows
+                .Where(x => x.WorkflowId.Equals(summary.WorkflowId, StringComparison.OrdinalIgnoreCase)))
+                .FirstOrDefault() ?? summary;
+
             var detail = new WorkflowDetail
             {
-                Summary = summary,
+                Summary = groupedSummary,
                 OpenSignals = ["refreshInventory", "changePriority", "operatorOverride"],
                 InputJson = """
                 {
@@ -145,7 +155,8 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
                   "slaMinutes": 60
                 }
                 """,
-                History = BuildHistory(summary)
+                History = BuildHistory(groupedSummary),
+                ContinuationRuns = groupedSummary.ContinuationRuns
             };
 
             return Task.FromResult<WorkflowDetail?>(detail);
@@ -247,6 +258,71 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
             return Task.FromResult(Audit("Unpause schedule", scheduleId, RiskLevel.Medium, reason));
         }
     }
+
+    private static IReadOnlyList<WorkflowExecutionSummary> GroupContinuationRuns(IEnumerable<WorkflowExecutionSummary> workflows)
+    {
+        return workflows
+            .GroupBy(x => x.WorkflowId, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var runs = g
+                    .OrderByDescending(x => x.StartedAt)
+                    .Select(x => ToRunSummary(x, false))
+                    .ToList();
+
+                var current = runs
+                    .OrderByDescending(x => x.Status == WorkflowStatus.Running)
+                    .ThenByDescending(x => x.Status != WorkflowStatus.ContinuedAsNew)
+                    .ThenByDescending(x => x.StartedAt)
+                    .First();
+
+                foreach (var run in runs)
+                {
+                    run.IsCurrent = run.RunId.Equals(current.RunId, StringComparison.OrdinalIgnoreCase);
+                }
+
+                var representative = g.First(x => x.RunId.Equals(current.RunId, StringComparison.OrdinalIgnoreCase));
+                var started = runs.Min(x => x.StartedAt);
+                DateTimeOffset? closed = runs.Any(x => x.ClosedAt is null) ? (DateTimeOffset?)null : runs.Max(x => x.ClosedAt);
+                var latency = closed is null ? DateTimeOffset.Now - started : closed.Value - started;
+
+                return new WorkflowExecutionSummary
+                {
+                    WorkflowId = representative.WorkflowId,
+                    RunId = current.RunId,
+                    WorkflowType = representative.WorkflowType,
+                    Status = current.Status,
+                    TaskQueue = representative.TaskQueue,
+                    Namespace = representative.Namespace,
+                    StartedAt = started,
+                    ClosedAt = closed,
+                    Attempt = runs.Count,
+                    PendingActivities = representative.PendingActivities,
+                    HistoryLength = runs.Sum(x => x.HistoryLength),
+                    LatencySeconds = (decimal)Math.Max(0, latency.TotalSeconds),
+                    Risk = g.Max(x => x.Risk),
+                    Owner = representative.Owner,
+                    Memo = representative.Memo,
+                    SearchAttributes = representative.SearchAttributes,
+                    ContinuationRunCount = runs.Count,
+                    ContinuationRuns = runs
+                };
+            })
+            .ToList();
+    }
+
+    private static WorkflowRunSummary ToRunSummary(WorkflowExecutionSummary summary, bool isCurrent) => new()
+    {
+        WorkflowId = summary.WorkflowId,
+        RunId = summary.RunId,
+        Status = summary.Status,
+        TaskQueue = summary.TaskQueue,
+        StartedAt = summary.StartedAt,
+        ClosedAt = summary.ClosedAt,
+        HistoryLength = summary.HistoryLength,
+        LatencySeconds = summary.LatencySeconds,
+        IsCurrent = isCurrent
+    };
 
     private WorkflowExecutionSummary? FindWorkflow(string workflowId, string runId) =>
         _workflows.FirstOrDefault(x =>

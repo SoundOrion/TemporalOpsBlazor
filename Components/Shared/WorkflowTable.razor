@@ -1,14 +1,14 @@
 @inject NavigationManager Nav
 
 <div class="table-shell">
-    <table class="data-table">
+    <table class="data-table workflow-group-table">
         <thead>
             <tr>
                 <th>Workflow</th>
                 <th>Status</th>
                 <th>Risk</th>
+                <th>Runs</th>
                 <th>Task Queue</th>
-                <th>Attempt</th>
                 <th>Pending</th>
                 <th>Latency</th>
                 <th>Owner</th>
@@ -18,17 +18,41 @@
         <tbody>
         @foreach (var workflow in Items)
         {
-            <tr>
+            var isExpanded = IsExpanded(workflow);
+            <tr class="@RowClass(workflow)">
                 <td>
-                    <div class="workflow-cell">
-                        <strong>@workflow.WorkflowId</strong>
-                        <span>@workflow.WorkflowType</span>
+                    <div class="workflow-cell workflow-cell-with-toggle">
+                        @if (workflow.HasContinuationChain)
+                        {
+                            <button class="chain-toggle" title="Continue-As-New chainを表示" @onclick="() => Toggle(workflow)">
+                                <span class="@ToggleIconClass(isExpanded)">▾</span>
+                            </button>
+                        }
+                        <div class="workflow-cell-main">
+                            <strong>@workflow.WorkflowId</strong>
+                            <span>@workflow.WorkflowType</span>
+                            @if (workflow.HasContinuationChain)
+                            {
+                                <small class="chain-note">current run: <code>@ShortRunId(workflow.RunId)</code></small>
+                            }
+                        </div>
                     </div>
                 </td>
                 <td><StatusBadge Value="@workflow.Status" /></td>
                 <td><StatusBadge Value="@workflow.Risk" /></td>
+                <td>
+                    @if (workflow.HasContinuationChain)
+                    {
+                        <button class="chain-badge" @onclick="() => Toggle(workflow)">
+                            ContinueAsNew × @workflow.ContinuationRunCount
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="muted-text">1</span>
+                    }
+                </td>
                 <td><code>@workflow.TaskQueue</code></td>
-                <td>@workflow.Attempt</td>
                 <td>@workflow.PendingActivities</td>
                 <td>@workflow.LatencySeconds.ToString("N1")s</td>
                 <td>@workflow.Owner</td>
@@ -37,6 +61,43 @@
                     <button class="button button-compact" @onclick="() => OnAction.InvokeAsync(workflow)">操作</button>
                 </td>
             </tr>
+            @if (workflow.HasContinuationChain && isExpanded)
+            {
+                <tr class="chain-detail-row">
+                    <td colspan="9">
+                        <div class="chain-detail">
+                            <div class="chain-detail-header">
+                                <strong>Continue-As-New run chain</strong>
+                                <span>古いRunから新しいRunへ。操作対象は current run です。</span>
+                            </div>
+                            <div class="chain-timeline">
+                                @foreach (var run in workflow.ContinuationRuns.OrderBy(r => r.StartedAt))
+                                {
+                                    <div class="@ChainRunClass(run)">
+                                        <div class="chain-dot"></div>
+                                        <div class="chain-run-body">
+                                            <div class="chain-run-top">
+                                                <code>@ShortRunId(run.RunId)</code>
+                                                @if (run.IsCurrent)
+                                                {
+                                                    <span class="current-chip">current</span>
+                                                }
+                                                <StatusBadge Value="@run.Status" />
+                                            </div>
+                                            <div class="chain-run-meta">
+                                                <span>@run.StartedAt.ToLocalTime().ToString("MM/dd HH:mm")</span>
+                                                <span>@(run.ClosedAt?.ToLocalTime().ToString("MM/dd HH:mm") ?? "running")</span>
+                                                <span>history @run.HistoryLength</span>
+                                                <span>@run.LatencySeconds.ToString("N1")s</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            }
         }
         </tbody>
     </table>
@@ -46,5 +107,36 @@
     [Parameter, EditorRequired] public IReadOnlyList<WorkflowExecutionSummary> Items { get; set; } = [];
     [Parameter] public EventCallback<WorkflowExecutionSummary> OnAction { get; set; }
 
+    private readonly HashSet<string> _expandedWorkflowIds = new(StringComparer.OrdinalIgnoreCase);
+
     private void OpenDetail(WorkflowExecutionSummary workflow) => Nav.NavigateTo($"/workflows/{workflow.WorkflowId}");
+
+    private bool IsExpanded(WorkflowExecutionSummary workflow) => _expandedWorkflowIds.Contains(workflow.WorkflowId);
+
+    private void Toggle(WorkflowExecutionSummary workflow)
+    {
+        if (!_expandedWorkflowIds.Add(workflow.WorkflowId))
+        {
+            _expandedWorkflowIds.Remove(workflow.WorkflowId);
+        }
+    }
+
+    private static string RowClass(WorkflowExecutionSummary workflow) =>
+        workflow.HasContinuationChain ? "has-chain" : string.Empty;
+
+    private static string ToggleIconClass(bool isExpanded) =>
+        isExpanded ? "is-open" : string.Empty;
+
+    private static string ChainRunClass(WorkflowRunSummary run) =>
+        run.IsCurrent ? "chain-run is-current" : "chain-run";
+
+    private static string ShortRunId(string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId))
+        {
+            return "-";
+        }
+
+        return runId.Length <= 8 ? runId : runId[..8];
+    }
 }
