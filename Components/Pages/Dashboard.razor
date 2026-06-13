@@ -9,17 +9,81 @@
 }
 else
 {
-    <section class="hero-panel">
+    var healthScore = CalculateHealthScore(_snapshot);
+    var operatingMode = GetOperatingMode(_snapshot, healthScore);
+    var operatingRisk = GetOperatingRisk(_snapshot, healthScore);
+    var actions = BuildRecommendedActions(_snapshot).ToList();
+
+    <section class="hero-panel hero-panel-compact">
         <div>
-            <p class="eyebrow">Operations Overview</p>
-            <h1>Workflowの現在地を、判断できる粒度で。</h1>
-            <p>失敗・滞留・Worker劣化・Schedule衝突をひとつの画面に集約。危険操作は監査ログに残します。</p>
+            <p class="eyebrow">Operations Control Tower</p>
+            <h1>今、止めるべきか。任せてよいか。</h1>
+            <p>Workflow/Worker/Scheduleを、技術詳細よりも「業務影響・判断・次アクション」の順で集約します。</p>
         </div>
         <div class="hero-panel__meta">
             <span>Updated</span>
             <strong>@_snapshot.UpdatedAt.ToLocalTime().ToString("HH:mm:ss")</strong>
             <button class="button" @onclick="RefreshAsync">更新</button>
         </div>
+    </section>
+
+    <section class="ops-posture-grid">
+        <article class="panel ops-posture-card @PostureClass(healthScore)">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Current decision</p>
+                    <h2>運用判断</h2>
+                </div>
+                <StatusBadge Value="@operatingRisk" />
+            </div>
+            <div class="ops-posture-main">
+                <div class="health-ring" style="@($"--score:{healthScore}%")">
+                    <strong>@healthScore</strong>
+                    <span>health</span>
+                </div>
+                <div>
+                    <h3>@operatingMode</h3>
+                    <p>@BuildDecisionMemo(_snapshot, healthScore)</p>
+                </div>
+            </div>
+        </article>
+
+        <article class="panel ops-impact-card">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Business impact</p>
+                    <h2>業務影響サマリ</h2>
+                </div>
+            </div>
+            <div class="impact-grid">
+                <div><span>要確認</span><strong>@CountHighAttention(_snapshot)</strong><small>High/Critical or failed</small></div>
+                <div><span>滞留</span><strong>@_snapshot.StuckWorkflows</strong><small>SLA超過候補</small></div>
+                <div><span>Backlog</span><strong>@_snapshot.Workers.Sum(w => w.Backlog)</strong><small>Task queue total</small></div>
+                <div><span>停止中Schedule</span><strong>@_snapshot.Schedules.Count(s => s.IsPaused)</strong><small>再開判断待ち</small></div>
+            </div>
+        </article>
+
+        <article class="panel ops-actions-card">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Next actions</p>
+                    <h2>次に見るべきこと</h2>
+                </div>
+                <a class="text-link" href="/ops-review">レビュー</a>
+            </div>
+            <div class="ops-action-list">
+                @foreach (var action in actions.Take(3))
+                {
+                    <a class="ops-action-item" href="@action.Href">
+                        <StatusBadge Value="@action.Risk" />
+                        <div>
+                            <strong>@action.Title</strong>
+                            <span>@action.Description</span>
+                        </div>
+                    </a>
+                }
+            </div>
+        </article>
     </section>
 
     <section class="metric-grid">
@@ -46,16 +110,35 @@ else
         <article class="panel">
             <div class="panel-header">
                 <div>
-                    <p class="eyebrow">Throughput</p>
-                    <h2>完了数 / hour</h2>
+                    <p class="eyebrow">Executive brief</p>
+                    <h2>管理者向け要約</h2>
                 </div>
             </div>
-            <div class="bar-chart">
-                @foreach (var point in _snapshot.Throughput)
+            <div class="brief-list">
+                @foreach (var item in BuildExecutiveBrief(_snapshot, healthScore))
                 {
-                    <div class="bar-chart__item">
-                        <div class="bar-chart__bar" style="@($"height:{Math.Max(18, point.Value)}px")"></div>
-                        <span>@point.Label</span>
+                    <div class="brief-item">
+                        <span>@item.Icon</span>
+                        <p>@item.Text</p>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Risk mix</p>
+                    <h2>リスク構成</h2>
+                </div>
+            </div>
+            <div class="risk-bars">
+                @foreach (var bucket in BuildRiskBuckets(_snapshot))
+                {
+                    <div class="risk-bar-row">
+                        <span>@bucket.Label</span>
+                        <div class="risk-bar-track"><div style="@($"width:{bucket.Width}%")" class="risk-bar-fill @bucket.CssClass"></div></div>
+                        <strong>@bucket.Count</strong>
                     </div>
                 }
             </div>
@@ -67,9 +150,10 @@ else
                     <p class="eyebrow">Workers</p>
                     <h2>Task Queue健全性</h2>
                 </div>
+                <a class="text-link" href="/workers">確認</a>
             </div>
             <div class="stack-list">
-                @foreach (var worker in _snapshot.Workers.Take(4))
+                @foreach (var worker in _snapshot.Workers.OrderByDescending(w => w.Status).ThenByDescending(w => w.Backlog).Take(4))
                 {
                     <div class="worker-row">
                         <div>
@@ -99,7 +183,25 @@ else
                             <strong>@schedule.ScheduleId</strong>
                             <span>@schedule.WorkflowType</span>
                         </div>
-                        <small>@schedule.NextRunAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
+                        <small>@(schedule.IsPaused ? "paused" : schedule.NextRunAt.ToLocalTime().ToString("MM/dd HH:mm"))</small>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Throughput</p>
+                    <h2>完了数 / hour</h2>
+                </div>
+            </div>
+            <div class="bar-chart">
+                @foreach (var point in _snapshot.Throughput)
+                {
+                    <div class="bar-chart__item">
+                        <div class="bar-chart__bar" style="@($"height:{Math.Max(18, point.Value)}px")"></div>
+                        <span>@point.Label</span>
                     </div>
                 }
             </div>
@@ -111,6 +213,7 @@ else
                     <p class="eyebrow">Governance</p>
                     <h2>直近の操作ログ</h2>
                 </div>
+                <a class="text-link" href="/audit">監査</a>
             </div>
             <div class="audit-mini-list">
                 @foreach (var audit in _snapshot.RecentAudit)
@@ -141,4 +244,116 @@ else
 
     private void OpenActionDrawer(WorkflowExecutionSummary workflow) => _selectedWorkflow = workflow;
     private void CloseActionDrawer() => _selectedWorkflow = null;
+
+    private static int CalculateHealthScore(TemporalDashboardSnapshot snapshot)
+    {
+        var workerPenalty = snapshot.Workers.Count(w => w.Status != WorkerStatus.Healthy) * 10;
+        var backlogPenalty = Math.Min(20, snapshot.Workers.Sum(w => w.Backlog) / 20);
+        var riskPenalty = snapshot.HotWorkflows.Count(w => w.Risk == RiskLevel.Critical) * 12 + snapshot.HotWorkflows.Count(w => w.Risk == RiskLevel.High) * 7;
+        var failurePenalty = snapshot.FailedWorkflows24h * 8;
+        var stuckPenalty = snapshot.StuckWorkflows * 10;
+        var schedulePenalty = snapshot.Schedules.Count(s => s.IsPaused || s.OverlapSkipped24h > 0) * 4;
+        return Math.Clamp(100 - workerPenalty - backlogPenalty - riskPenalty - failurePenalty - stuckPenalty - schedulePenalty, 0, 100);
+    }
+
+    private static string GetOperatingMode(TemporalDashboardSnapshot snapshot, int healthScore)
+    {
+        if (snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.Critical) || snapshot.FailedWorkflows24h >= 5 || healthScore < 55)
+        {
+            return "Incident mode";
+        }
+
+        if (snapshot.StuckWorkflows > 0 || snapshot.Workers.Any(w => w.Status == WorkerStatus.Degraded) || healthScore < 80)
+        {
+            return "Watch mode";
+        }
+
+        return "Normal operations";
+    }
+
+    private static RiskLevel GetOperatingRisk(TemporalDashboardSnapshot snapshot, int healthScore)
+    {
+        if (healthScore < 55 || snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.Critical)) return RiskLevel.Critical;
+        if (healthScore < 75 || snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.High)) return RiskLevel.High;
+        if (healthScore < 90 || snapshot.StuckWorkflows > 0) return RiskLevel.Medium;
+        return RiskLevel.Low;
+    }
+
+    private static string PostureClass(int healthScore) => healthScore switch
+    {
+        >= 85 => "is-good",
+        >= 70 => "is-watch",
+        _ => "is-incident"
+    };
+
+    private static int CountHighAttention(TemporalDashboardSnapshot snapshot) =>
+        snapshot.HotWorkflows.Count(w => w.Risk >= RiskLevel.High || w.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut or WorkflowStatus.Terminated);
+
+    private static string BuildDecisionMemo(TemporalDashboardSnapshot snapshot, int healthScore)
+    {
+        if (healthScore < 55 || snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.Critical))
+        {
+            return "業務影響が出る前提で扱い、責任者への即時共有と復旧判断を優先してください。";
+        }
+
+        if (snapshot.StuckWorkflows > 0 || snapshot.Workers.Any(w => w.Status != WorkerStatus.Healthy))
+        {
+            return "自動復旧だけに任せず、滞留WorkflowとWorkerの処理能力を優先確認してください。";
+        }
+
+        return "通常監視で継続可能です。変更作業や危険操作は監査ログ付きで実施してください。";
+    }
+
+    private static IEnumerable<OpsAction> BuildRecommendedActions(TemporalDashboardSnapshot snapshot)
+    {
+        if (snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.Critical || w.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut))
+        {
+            yield return new("失敗Workflowを復旧判断", "再実行・Reset・Terminateの判断理由を残す", "/workflows", RiskLevel.Critical);
+        }
+
+        if (snapshot.StuckWorkflows > 0)
+        {
+            yield return new("滞留Workflowを確認", "SLA超過候補の業務影響とOwnerを確認", "/workflows", RiskLevel.High);
+        }
+
+        if (snapshot.Workers.Any(w => w.Status != WorkerStatus.Healthy || w.Backlog > 0))
+        {
+            yield return new("Worker容量を確認", "Poller/Backlog/slot使用率を見て増強要否を判断", "/workers", RiskLevel.Medium);
+        }
+
+        if (snapshot.Schedules.Any(s => s.IsPaused || s.OverlapSkipped24h > 0))
+        {
+            yield return new("Schedule運用を確認", "Pause/Overlap skipの意図と再開可否を確認", "/schedules", RiskLevel.Medium);
+        }
+
+        yield return new("監査ログを確認", "危険操作の理由・対象・成功状態をレビュー", "/audit", RiskLevel.Low);
+    }
+
+    private static IEnumerable<BriefItem> BuildExecutiveBrief(TemporalDashboardSnapshot snapshot, int healthScore)
+    {
+        yield return new("◉", $"現在の運用スコアは {healthScore}/100。{GetOperatingMode(snapshot, healthScore)} として扱います。");
+        yield return new("↯", $"過去24時間の失敗は {snapshot.FailedWorkflows24h} 件、SLA超過候補は {snapshot.StuckWorkflows} 件です。");
+        yield return new("▣", $"Worker backlog合計は {snapshot.Workers.Sum(w => w.Backlog)}。処理能力低下があればWorker画面でTask Queue単位に確認します。");
+        yield return new("✓", $"危険操作は理由付き監査ログに残し、管理者レビューで説明可能な状態にします。");
+    }
+
+    private static IEnumerable<RiskBucket> BuildRiskBuckets(TemporalDashboardSnapshot snapshot)
+    {
+        var total = Math.Max(1, snapshot.HotWorkflows.Count);
+        foreach (var level in new[] { RiskLevel.Critical, RiskLevel.High, RiskLevel.Medium, RiskLevel.Low })
+        {
+            var count = snapshot.HotWorkflows.Count(w => w.Risk == level);
+            yield return new RiskBucket(level.ToString(), count, Math.Max(4, (int)Math.Round((double)count / total * 100)), level switch
+            {
+                RiskLevel.Critical => "risk-fill-critical",
+                RiskLevel.High => "risk-fill-high",
+                RiskLevel.Medium => "risk-fill-medium",
+                _ => "risk-fill-low"
+            });
+        }
+    }
+
+    private sealed record OpsAction(string Title, string Description, string Href, RiskLevel Risk);
+    private sealed record BriefItem(string Icon, string Text);
+    private sealed record RiskBucket(string Label, int Count, int Width, string CssClass);
 }

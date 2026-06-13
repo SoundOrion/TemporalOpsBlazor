@@ -127,3 +127,14 @@ export Temporal__Tls__ClientPrivateKeyPath='/secure/client.key'
 Workflow一覧では、同じ `WorkflowId` を持つ複数Runを Continue-As-New chain として1行に集約します。
 行の `ContinueAsNew × N` を開くと古いRunから現在Runまでのタイムラインを表示し、詳細画面にもRun chainを表示します。
 運用操作は、集約行の current run に対して実行されます。
+
+## v7 Operations / Management Brush-up
+
+This version adds a management-oriented operations layer on top of the workflow execution views.
+
+- Dashboard is now an Operations Control Tower: health score, operating mode, business impact summary, and next actions.
+- Added `/ops-review` for manager-friendly review: current statement, KPI evidence, high-attention workflows, and audit trail.
+- Prioritization is phrased around business impact and operational decisions, not only developer/debugging details.
+- Existing workflow actions remain guarded by reason input and audit records.
+- Continue-As-New chains remain grouped as a single logical workflow with per-run status/start/close metadata.
+
