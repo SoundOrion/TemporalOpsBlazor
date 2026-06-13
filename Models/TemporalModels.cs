@@ -77,7 +77,7 @@ public sealed class WorkflowExecutionSummary
     public string Memo { get; set; } = string.Empty;
     public string SearchAttributes { get; set; } = string.Empty;
 
-    // Continue-As-New で同じ WorkflowId に連なる Run を、一覧では1つの論理Workflowとして扱う。
+    // Runs connected by Continue-As-New share the same WorkflowId and are shown as one logical workflow in the list.
     public int ContinuationRunCount { get; set; } = 1;
     public IReadOnlyList<WorkflowRunSummary> ContinuationRuns { get; set; } = [];
     public bool HasContinuationChain => ContinuationRunCount > 1;

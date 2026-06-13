@@ -6,15 +6,15 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">Task Queue Health</p>
-        <h1>WorkerとBacklogを監視</h1>
-        <p>Poller数、Slot利用率、Heartbeat、Backlogから処理能力の偏りを見つけます。</p>
+        <h1>Monitor workers and backlog</h1>
+        <p>Use pollers, slot utilization, heartbeat, and backlog to spot capacity imbalance.</p>
     </div>
-    <button class="button" @onclick="LoadAsync">更新</button>
+    <button class="button" @onclick="LoadAsync">Refresh</button>
 </section>
 
 @if (_workers is null)
 {
-    <section class="loading-card">Worker情報を読み込み中...</section>
+    <section class="loading-card">Loading worker information...</section>
 }
 else
 {

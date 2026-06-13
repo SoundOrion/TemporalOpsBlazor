@@ -326,7 +326,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
     {
         if (string.IsNullOrWhiteSpace(signalName))
         {
-            return OperationResult.Fail("Signal名を入力してください。");
+            return OperationResult.Fail("Enter a signal name.");
         }
 
         IReadOnlyCollection<object?> args;
@@ -336,7 +336,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         }
         catch (JsonException ex)
         {
-            return OperationResult.Fail($"Payload JSONが不正です: {ex.Message}");
+            return OperationResult.Fail($"Invalid payload JSON: {ex.Message}");
         }
 
         return await RunAuditedWorkflowOperationAsync(
@@ -357,7 +357,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
     {
         if (eventId <= 0)
         {
-            return OperationResult.Fail("Reset Event IDは1以上を指定してください。");
+            return OperationResult.Fail("Reset Event ID must be greater than or equal to 1.");
         }
 
         return await RunAuditedWorkflowOperationAsync(
@@ -692,7 +692,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
     {
         if (string.IsNullOrWhiteSpace(reason))
         {
-            return OperationResult.Fail("操作理由を入力してください。");
+            return OperationResult.Fail("Enter an action reason.");
         }
 
         var target = string.IsNullOrWhiteSpace(runId) ? workflowId : $"{workflowId}/{runId}";
@@ -708,7 +708,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
     {
         if (string.IsNullOrWhiteSpace(reason))
         {
-            return OperationResult.Fail("操作理由を入力してください。");
+            return OperationResult.Fail("Enter an action reason.");
         }
 
         return await RunAuditedOperationAsync(action, scheduleId, risk, reason, operation);

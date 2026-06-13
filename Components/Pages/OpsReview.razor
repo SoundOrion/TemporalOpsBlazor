@@ -5,7 +5,7 @@
 
 @if (_snapshot is null)
 {
-    <section class="loading-card">運用レビューを作成中...</section>
+    <section class="loading-card">Building operations review...</section>
 }
 else
 {
@@ -16,10 +16,10 @@ else
     <section class="page-heading">
         <div>
             <p class="eyebrow">Operations Review</p>
-            <h1>管理者レビュー</h1>
-            <p>朝会・障害報告・週次レビューでそのまま使えるよう、業務影響、判断、証跡を1画面にまとめます。</p>
+            <h1>Operations review</h1>
+            <p>A one-page review for standups, incident updates, and weekly management reporting: impact, decisions, and evidence.</p>
         </div>
-        <button class="button" @onclick="RefreshAsync">更新</button>
+        <button class="button" @onclick="RefreshAsync">Refresh</button>
     </section>
 
     <section class="review-grid">
@@ -27,7 +27,7 @@ else
             <div class="panel-header">
                 <div>
                     <p class="eyebrow">Summary</p>
-                    <h2>現在の説明文</h2>
+                    <h2>Current statement</h2>
                 </div>
                 <span class="badge badge-info">@operatingMode</span>
             </div>
@@ -46,7 +46,7 @@ else
             <div class="panel-header">
                 <div>
                     <p class="eyebrow">Action tracker</p>
-                    <h2>管理判断が必要な項目</h2>
+                    <h2>Items requiring management decision</h2>
                 </div>
             </div>
             <div class="ops-action-list ops-action-list-review">
@@ -67,16 +67,16 @@ else
             <div class="panel-header">
                 <div>
                     <p class="eyebrow">Evidence</p>
-                    <h2>説明責任のための証跡</h2>
+                    <h2>Evidence for accountability</h2>
                 </div>
             </div>
             <div class="evidence-grid">
                 <div>
-                    <h3>優先Workflow</h3>
+                    <h3>Priority workflows</h3>
                     <WorkflowTable Items="@_snapshot.HotWorkflows.Take(5).ToList()" />
                 </div>
                 <div>
-                    <h3>直近の操作ログ</h3>
+                    <h3>Recent operator actions</h3>
                     <div class="audit-mini-list review-audit-list">
                         @foreach (var audit in _snapshot.RecentAudit.Take(8))
                         {
@@ -130,31 +130,31 @@ else
     }
 
     private static string BuildStatement(TemporalDashboardSnapshot snapshot, int healthScore) =>
-        $"{snapshot.Namespace} namespace は現在 {GetOperatingMode(snapshot, healthScore)} です。過去24時間の失敗は {snapshot.FailedWorkflows24h} 件、滞留候補は {snapshot.StuckWorkflows} 件、Worker backlog合計は {snapshot.Workers.Sum(w => w.Backlog)} です。高リスクWorkflowは {snapshot.HotWorkflows.Count(w => w.Risk >= RiskLevel.High)} 件あり、必要な操作は監査ログに理由付きで記録します。";
+        $"{snapshot.Namespace} namespace is currently in {GetOperatingMode(snapshot, healthScore)}. Failures in the last 24 hours: {snapshot.FailedWorkflows24h}; stuck candidates: {snapshot.StuckWorkflows}; total worker backlog: {snapshot.Workers.Sum(w => w.Backlog)}. High-risk workflows: {snapshot.HotWorkflows.Count(w => w.Risk >= RiskLevel.High)}. Required actions are recorded in the audit log with reasons.";
 
     private static IEnumerable<OpsAction> BuildRecommendedActions(TemporalDashboardSnapshot snapshot)
     {
         if (snapshot.HotWorkflows.Any(w => w.Risk == RiskLevel.Critical || w.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut))
         {
-            yield return new("失敗Workflowを復旧判断", "再実行・Reset・Terminateの判断理由を残す", "/workflows", RiskLevel.Critical);
+            yield return new("Decide failed workflow recovery", "Document the rationale for retry, reset, or terminate.", "/workflows", RiskLevel.Critical);
         }
 
         if (snapshot.StuckWorkflows > 0)
         {
-            yield return new("滞留Workflowを確認", "SLA超過候補の業務影響とOwnerを確認", "/workflows", RiskLevel.High);
+            yield return new("Review stuck workflows", "Confirm business impact and owners for potential SLA breaches.", "/workflows", RiskLevel.High);
         }
 
         if (snapshot.Workers.Any(w => w.Status != WorkerStatus.Healthy || w.Backlog > 0))
         {
-            yield return new("Worker容量を確認", "Poller/Backlog/slot使用率を見て増強要否を判断", "/workers", RiskLevel.Medium);
+            yield return new("Review worker capacity", "Use pollers, backlog, and slot utilization to decide whether more capacity is needed.", "/workers", RiskLevel.Medium);
         }
 
         if (snapshot.Schedules.Any(s => s.IsPaused || s.OverlapSkipped24h > 0))
         {
-            yield return new("Schedule運用を確認", "Pause/Overlap skipの意図と再開可否を確認", "/schedules", RiskLevel.Medium);
+            yield return new("Review schedule operations", "Confirm paused schedules, overlap skips, and resume readiness.", "/schedules", RiskLevel.Medium);
         }
 
-        yield return new("監査ログを確認", "危険操作の理由・対象・成功状態をレビュー", "/audit", RiskLevel.Low);
+        yield return new("Review audit log", "Review reasons, targets, and outcomes for high-impact actions.", "/audit", RiskLevel.Low);
     }
 
     private sealed record OpsAction(string Title, string Description, string Href, RiskLevel Risk);

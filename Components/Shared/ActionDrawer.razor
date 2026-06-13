@@ -17,18 +17,18 @@
         }
 
         <div class="danger-panel">
-            <strong>安全ガード</strong>
-            <p>CancelはWorkflowにクリーンアップの余地を残します。Terminate/Resetは影響が大きいため、理由入力と二段確認を必須にしています。</p>
+            <strong>Safety guard</strong>
+            <p>Cancel allows workflow cleanup. Terminate and Reset are high-impact actions, so they require a reason and two-step confirmation.</p>
         </div>
 
         <EditForm Model="@this" OnValidSubmit="RunActionAsync">
             <div class="form-stack">
                 <label>
-                    操作
+                    Action
                     <select @bind="SelectedAction">
-                        <option value="signal">Signalを送信</option>
-                        <option value="cancel">Cancelを要求</option>
-                        <option value="reset">指定EventからReset</option>
+                        <option value="signal">Send Signal</option>
+                        <option value="cancel">Request Cancel</option>
+                        <option value="reset">Reset from event</option>
                         <option value="terminate">Terminate</option>
                     </select>
                 </label>
@@ -36,7 +36,7 @@
                 @if (SelectedAction == "signal")
                 {
                     <label>
-                        Signal名
+                        Signal name
                         <input @bind="SignalName" placeholder="refreshInventory" />
                     </label>
                     <label>
@@ -54,15 +54,15 @@
                 }
 
                 <label>
-                    操作理由 <span class="required">必須</span>
-                    <textarea @bind="Reason" rows="4" placeholder="障害チケット、判断根拠、期待する状態を記録"></textarea>
+                    Reason <span class="required">required</span>
+                    <textarea @bind="Reason" rows="4" placeholder="Record the incident ticket, decision rationale, and expected outcome."></textarea>
                 </label>
 
                 @if (SelectedAction is "terminate" or "reset")
                 {
                     <label>
-                        確認入力
-                        <input @bind="Confirmation" placeholder="@Workflow.WorkflowId を入力" />
+                        Confirmation
+                        <input @bind="Confirmation" placeholder="@($"Type {Workflow.WorkflowId} to confirm")" />
                     </label>
                 }
 
@@ -90,11 +90,11 @@
 
     private string ButtonText => SelectedAction switch
     {
-        "signal" => "Signalを送信",
-        "cancel" => "Cancelを要求",
-        "reset" => "Resetを実行",
-        "terminate" => "Terminateを実行",
-        _ => "実行"
+        "signal" => "Send Signal",
+        "cancel" => "Request Cancel",
+        "reset" => "Run Reset",
+        "terminate" => "Run Terminate",
+        _ => "Run"
     };
 
     private async Task RunActionAsync()
@@ -105,14 +105,14 @@
         if (string.IsNullOrWhiteSpace(Reason))
         {
             Succeeded = false;
-            Message = "操作理由を入力してください。";
+            Message = "Enter an action reason.";
             return;
         }
 
         if (SelectedAction is "terminate" or "reset" && Confirmation != Workflow.WorkflowId)
         {
             Succeeded = false;
-            Message = "危険操作の確認入力が一致しません。";
+            Message = "Confirmation does not match the Workflow ID.";
             return;
         }
 
@@ -126,7 +126,7 @@
                 "cancel" => await Service.RequestCancellationAsync(Workflow.WorkflowId, Workflow.RunId, Reason),
                 "reset" => await Service.ResetAsync(Workflow.WorkflowId, Workflow.RunId, ResetEventId, Reason),
                 "terminate" => await Service.TerminateAsync(Workflow.WorkflowId, Workflow.RunId, Reason),
-                _ => OperationResult.Fail("未対応の操作です。")
+                _ => OperationResult.Fail("Unsupported action.")
             };
         }
         finally

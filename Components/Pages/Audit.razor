@@ -6,15 +6,15 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">Audit Trail</p>
-        <h1>運用操作の監査ログ</h1>
-        <p>Signal、Cancel、Reset、Terminate、Schedule変更を理由付きで追跡します。</p>
+        <h1>Operator action audit log</h1>
+        <p>Track Signal, Cancel, Reset, Terminate, and Schedule changes with reasons.</p>
     </div>
-    <button class="button" @onclick="LoadAsync">更新</button>
+    <button class="button" @onclick="LoadAsync">Refresh</button>
 </section>
 
 @if (_audit is null)
 {
-    <section class="loading-card">監査ログを読み込み中...</section>
+    <section class="loading-card">Loading audit log...</section>
 }
 else
 {

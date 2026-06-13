@@ -6,15 +6,15 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">Workflow Search</p>
-        <h1>Workflow実行を検索・操作</h1>
-        <p>Workflow ID、Run ID、Type、Owner、Search Attributesで絞り込み、運用操作に進めます。</p>
+        <h1>Search and operate workflow executions</h1>
+        <p>Filter by Workflow ID, Run ID, type, owner, or Search Attributes, then take controlled operator actions.</p>
     </div>
-    <button class="button" @onclick="SearchAsync">再検索</button>
+    <button class="button" @onclick="SearchAsync">Search again</button>
 </section>
 
 <section class="filter-panel">
     <label>
-        キーワード
+        Keyword
         <input @bind="_query.Keyword" @bind:event="oninput" placeholder="order / provider / workflow id" />
     </label>
     <label>
@@ -41,18 +41,18 @@
             }
         </select>
     </label>
-    <button class="button button-compact" @onclick="SearchAsync">検索</button>
+    <button class="button button-compact" @onclick="SearchAsync">Search</button>
 </section>
 
 @if (_items is null)
 {
-    <section class="loading-card">Workflow一覧を読み込み中...</section>
+    <section class="loading-card">Loading workflows...</section>
 }
 else if (_items.Count == 0)
 {
     <section class="empty-state">
-        <h2>該当Workflowはありません</h2>
-        <p>検索条件を緩めるか、Namespace/Task Queueを確認してください。</p>
+        <h2>No matching workflows</h2>
+        <p>Relax the filters or verify the Namespace and Task Queue.</p>
     </section>
 }
 else
@@ -61,9 +61,9 @@ else
         <div class="panel-header">
             <div>
                 <p class="eyebrow">Results</p>
-                <h2>@_items.Count 件</h2>
+                <h2>@_items.Count results</h2>
             </div>
-            <small>危険度順に表示</small>
+            <small>Sorted by operational risk</small>
         </div>
         <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" />
     </section>

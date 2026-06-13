@@ -8,8 +8,8 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">Connection & Policy</p>
-        <h1>接続・権限ポリシー設定</h1>
-        <p>appsettings.json / 環境変数からTemporal接続先を読み込みます。UseMock=false の場合はTemporal .NET SDKで実データに接続します。</p>
+        <h1>Connection and access policy settings</h1>
+        <p>Temporal connection settings are loaded from appsettings.json and environment variables. When UseMock=false, the app connects to live Temporal data through the Temporal .NET SDK.</p>
     </div>
 </section>
 
@@ -39,10 +39,10 @@
     <article class="panel">
         <div class="panel-header"><h2>Action policy</h2></div>
         <ul class="policy-list">
-            <li>TerminateとResetはWorkflow IDの確認入力を必須化</li>
-            <li>すべての操作に理由入力とAudit logを付与</li>
-            <li>Critical Riskは本番ではRBAC/承認フロー連携推奨</li>
-            <li>Signal payloadはJSONとして検証し、配列なら複数引数として送信</li>
+            <li>Terminate and Reset require Workflow ID confirmation.</li>
+            <li>Every action requires a reason and is recorded in the audit log.</li>
+            <li>Critical-risk actions should be integrated with RBAC and approval workflows in production.</li>
+            <li>Signal payloads are validated as JSON; arrays are sent as multiple arguments.</li>
         </ul>
     </article>
 </section>

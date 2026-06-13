@@ -57,7 +57,7 @@ public sealed class TemporalClientProvider
             || !string.IsNullOrWhiteSpace(_settings.Tls.ClientCertPath)
             || !string.IsNullOrWhiteSpace(_settings.Tls.ClientPrivateKeyPath);
 
-        // Temporal Cloud API Key接続ではSDKがTLSを自動有効化します。
+        // The SDK automatically enables TLS for Temporal Cloud API Key connections.
         if (!hasTlsMaterial)
         {
             return null;

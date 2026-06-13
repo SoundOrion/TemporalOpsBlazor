@@ -6,10 +6,10 @@
 <section class="page-heading">
     <div>
         <p class="eyebrow">Schedules</p>
-        <h1>定期Workflowの運用管理</h1>
-        <p>Pause/Unpauseは監査ログ付きで実行し、Overlap skipの多いScheduleを優先確認します。</p>
+        <h1>Manage scheduled workflows</h1>
+        <p>Pause and unpause with audit logging, and prioritize schedules with frequent overlap skips.</p>
     </div>
-    <button class="button" @onclick="LoadAsync">更新</button>
+    <button class="button" @onclick="LoadAsync">Refresh</button>
 </section>
 
 @if (!string.IsNullOrWhiteSpace(_message))
@@ -19,7 +19,7 @@
 
 @if (_schedules is null)
 {
-    <section class="loading-card">Schedule一覧を読み込み中...</section>
+    <section class="loading-card">Loading schedules...</section>
 }
 else
 {

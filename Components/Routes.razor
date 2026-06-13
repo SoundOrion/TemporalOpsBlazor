@@ -1,14 +1,13 @@
-<Router AppAssembly="@typeof(Program).Assembly">
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="@typeof(TemporalOpsBlazor.Components.Layout.MainLayout)" />
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
     <NotFound>
-        <LayoutView Layout="@typeof(TemporalOpsBlazor.Components.Layout.MainLayout)">
+        <LayoutView Layout="typeof(Layout.MainLayout)">
             <section class="empty-state">
-                <p class="eyebrow">404</p>
-                <h1>ページが見つかりません</h1>
-                <p>指定されたTemporal運用ビューは存在しません。</p>
+                <h1>Page not found</h1>
+                <p>The requested Temporal operations view does not exist.</p>
             </section>
         </LayoutView>
     </NotFound>

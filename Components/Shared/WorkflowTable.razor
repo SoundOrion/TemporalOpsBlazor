@@ -24,7 +24,7 @@
                     <div class="workflow-cell workflow-cell-with-toggle">
                         @if (workflow.HasContinuationChain)
                         {
-                            <button class="chain-toggle" title="Continue-As-New chainを表示" @onclick="() => Toggle(workflow)">
+                            <button class="chain-toggle" title="Show Continue-As-New chain" @onclick="() => Toggle(workflow)">
                                 <span class="@ToggleIconClass(isExpanded)">▾</span>
                             </button>
                         }
@@ -57,8 +57,8 @@
                 <td>@workflow.LatencySeconds.ToString("N1")s</td>
                 <td>@workflow.Owner</td>
                 <td class="row-actions">
-                    <button class="button button-ghost" @onclick="() => OpenDetail(workflow)">詳細</button>
-                    <button class="button button-compact" @onclick="() => OnAction.InvokeAsync(workflow)">操作</button>
+                    <button class="button button-ghost" @onclick="() => OpenDetail(workflow)">Details</button>
+                    <button class="button button-compact" @onclick="() => OnAction.InvokeAsync(workflow)">Action</button>
                 </td>
             </tr>
             @if (workflow.HasContinuationChain && isExpanded)
@@ -68,7 +68,7 @@
                         <div class="chain-detail">
                             <div class="chain-detail-header">
                                 <strong>Continue-As-New run chain</strong>
-                                <span>古いRunから新しいRunへ。操作対象は current run です。</span>
+                                <span>Runs are ordered from oldest to newest. Actions target the current run.</span>
                             </div>
                             <div class="chain-timeline">
                                 @foreach (var run in workflow.ContinuationRuns.OrderBy(r => r.StartedAt))

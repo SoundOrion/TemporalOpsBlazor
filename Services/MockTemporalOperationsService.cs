@@ -192,7 +192,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var workflow = FindWorkflow(workflowId, runId);
-            if (workflow is null) return Task.FromResult(OperationResult.Fail("対象Workflowが見つかりません。"));
+            if (workflow is null) return Task.FromResult(OperationResult.Fail("Target workflow was not found."));
             workflow.Status = WorkflowStatus.Cancelled;
             workflow.ClosedAt = DateTimeOffset.Now;
             return Task.FromResult(Audit("Request cancellation", workflowId, RiskLevel.High, reason));
@@ -204,7 +204,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var workflow = FindWorkflow(workflowId, runId);
-            if (workflow is null) return Task.FromResult(OperationResult.Fail("対象Workflowが見つかりません。"));
+            if (workflow is null) return Task.FromResult(OperationResult.Fail("Target workflow was not found."));
             workflow.Status = WorkflowStatus.Terminated;
             workflow.ClosedAt = DateTimeOffset.Now;
             return Task.FromResult(Audit("Terminate", workflowId, RiskLevel.Critical, reason));
@@ -216,7 +216,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var workflow = FindWorkflow(workflowId, runId);
-            if (workflow is null) return Task.FromResult(OperationResult.Fail("対象Workflowが見つかりません。"));
+            if (workflow is null) return Task.FromResult(OperationResult.Fail("Target workflow was not found."));
             workflow.Memo = $"Signal '{signalName}' sent. {workflow.Memo}";
             return Task.FromResult(Audit($"Signal: {signalName}", workflowId, RiskLevel.Medium, reason));
         }
@@ -227,7 +227,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var workflow = FindWorkflow(workflowId, runId);
-            if (workflow is null) return Task.FromResult(OperationResult.Fail("対象Workflowが見つかりません。"));
+            if (workflow is null) return Task.FromResult(OperationResult.Fail("Target workflow was not found."));
             workflow.Status = WorkflowStatus.Running;
             workflow.Attempt += 1;
             workflow.PendingActivities = Math.Max(1, workflow.PendingActivities);
@@ -242,7 +242,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var schedule = _schedules.FirstOrDefault(x => x.ScheduleId.Equals(scheduleId, StringComparison.OrdinalIgnoreCase));
-            if (schedule is null) return Task.FromResult(OperationResult.Fail("対象Scheduleが見つかりません。"));
+            if (schedule is null) return Task.FromResult(OperationResult.Fail("Target schedule was not found."));
             schedule.IsPaused = true;
             return Task.FromResult(Audit("Pause schedule", scheduleId, RiskLevel.High, reason));
         }
@@ -253,7 +253,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         lock (_sync)
         {
             var schedule = _schedules.FirstOrDefault(x => x.ScheduleId.Equals(scheduleId, StringComparison.OrdinalIgnoreCase));
-            if (schedule is null) return Task.FromResult(OperationResult.Fail("対象Scheduleが見つかりません。"));
+            if (schedule is null) return Task.FromResult(OperationResult.Fail("Target schedule was not found."));
             schedule.IsPaused = false;
             return Task.FromResult(Audit("Unpause schedule", scheduleId, RiskLevel.Medium, reason));
         }
@@ -342,7 +342,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
             Succeeded = true
         };
         _audit.Add(audit);
-        return OperationResult.Ok($"{action} を受け付けました。", audit);
+        return OperationResult.Ok($"{action} accepted.", audit);
     }
 
     private static IReadOnlyList<MetricPoint> BuildThroughput() =>

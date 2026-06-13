@@ -1,34 +1,38 @@
-# Temporal integration guide
+# Temporal連携メモ
 
-この版では `ITemporalOperationsService` の実装を `TemporalOperationsService` に切り替えることで、Temporalの実データを表示・操作できます。
+このプロジェクトは、`ITemporalOperationsService` の実装をモックから `TemporalOperationsService` へ切り替えることで、実Temporal環境のデータ表示と操作に対応します。
 
-## 接続方式
+アプリケーションUIは英語で統一し、このドキュメントは導入・保守担当者向けに日本語で記載しています。
 
-`Program.cs` で `Temporal:UseMock` を読み、以下のようにDIを切り替えています。
+## DIの切り替え
+
+`Program.cs` では `Temporal:UseMock` を読み取り、モックサービスまたは実Temporal接続サービスを登録します。
 
 ```csharp
-var useMock = builder.Configuration.GetValue("Temporal:UseMock", false);
-if (useMock)
+if (temporalSettings.UseMock)
 {
     builder.Services.AddSingleton<ITemporalOperationsService, MockTemporalOperationsService>();
 }
 else
 {
+    builder.Services.AddSingleton<TemporalClientProvider>();
     builder.Services.AddSingleton<ITemporalOperationsService, TemporalOperationsService>();
 }
 ```
 
-## 実Temporal実装の責務
+## 実Temporalサービスの責務
 
-`TemporalOperationsService` は以下を担当します。
+`TemporalOperationsService` は主に以下を担当します。
 
-- Visibility queryを組み立ててWorkflow一覧を取得
-- Workflow handleからDescribe / History / Signal / Cancel / Terminateを実行
-- raw gRPC serviceからResetWorkflowExecution / DescribeTaskQueueを実行
-- Schedule一覧取得とPause / Unpauseを実行
-- UI操作結果をインメモリAudit logに記録
+- Workflow検索用のVisibility Query生成
+- Workflow summary、description、history の取得
+- Continue-As-New chain の取得と集約
+- Signal、Cancel、Terminate、Reset の実行
+- ResetWorkflowExecution と DescribeTaskQueue のための raw gRPC service 呼び出し
+- Schedule一覧取得とPause / Unpause
+- UI上の操作結果を監査ログへ記録
 
-## 設定例: local dev server
+## ローカル開発サーバーの設定例
 
 ```json
 "Temporal": {
@@ -39,38 +43,49 @@ else
 }
 ```
 
-## 設定例: Temporal Cloud API Key
+## Temporal Cloud API Key の設定例
 
-```json
-"Temporal": {
-  "UseMock": false,
-  "TargetHost": "your-namespace.account.tmprl.cloud:7233",
-  "Namespace": "your-namespace.account",
-  "ApiKey": "<secret>",
-  "Tls": {
-    "Enabled": true
-  }
-}
+```bash
+export Temporal__UseMock=false
+export Temporal__TargetHost='your-namespace.account.tmprl.cloud:7233'
+export Temporal__Namespace='your-namespace.account'
+export Temporal__ApiKey='your-api-key'
+export Temporal__Tls__Enabled=true
 ```
 
-## 設定例: mTLS
+## mTLS の設定例
 
-```json
-"Temporal": {
-  "UseMock": false,
-  "TargetHost": "your-namespace.account.tmprl.cloud:7233",
-  "Namespace": "your-namespace.account",
-  "Tls": {
-    "Enabled": true,
-    "ClientCertPath": "/secure/client.pem",
-    "ClientPrivateKeyPath": "/secure/client.key"
-  }
-}
+```bash
+export Temporal__UseMock=false
+export Temporal__TargetHost='your-namespace.account.tmprl.cloud:7233'
+export Temporal__Namespace='your-namespace.account'
+export Temporal__Tls__Enabled=true
+export Temporal__Tls__ClientCertPath='/secure/client.pem'
+export Temporal__Tls__ClientKeyPath='/secure/client.key'
 ```
 
-## 注意点
+## Continue-As-New の扱い
 
-- `HistoryEventLimit` を大きくしすぎると詳細画面が重くなります。
-- `Reset` は `WorkflowTaskFinishEventId` を指定します。誤操作防止のためUI側ではWorkflow ID確認入力を必須にしています。
-- `DescribeTaskQueue` のWorkflow Task Queue統計はsticky queueを含まない場合があるため、Backlog/Dispatch rateは運用判断の補助指標として扱ってください。
-- このサンプルのAudit logはインメモリです。本番ではDBや監査基盤へ永続化してください。
+Temporalでは Continue-As-New により、同じWorkflow IDのまま新しいRunへ継続されるケースがあります。
+
+このUIでは、同一 `WorkflowId` のRunを1つの論理Workflowとして集約します。Workflow一覧では `ContinueAsNew × N` として表示し、展開すると各Runの Status、Start Time、Close Time、History、Latency を確認できます。
+
+運用上の操作対象はCurrent Runに統一しています。これにより、古いRunに対して誤ってSignalやTerminateを行うリスクを下げます。
+
+## 運用上の注意
+
+- `HistoryEventLimit` を大きくしすぎると、詳細画面が重くなる可能性があります。
+- Resetでは `WorkflowTaskFinishEventId` を利用します。誤操作防止のため、UIではWorkflow IDの確認入力を必須にしています。
+- `DescribeTaskQueue` の統計値はsticky queueを含まない場合があるため、BacklogやDispatch Rateは絶対値ではなく運用判断の目安として扱ってください。
+- サンプルの監査ログはインメモリです。本番ではDBや監査基盤へ永続化してください。
+- 本番ではUIからTemporalへ直接接続するより、バックエンドAPIを挟んでRBAC、承認、監査、レート制限を強制する構成を推奨します。
+
+## 本番導入時に追加検討したい項目
+
+- OIDC / Entra ID / Okta などによるログイン統合
+- Namespace、Task Queue、Workflow Type、操作種別ごとの権限制御
+- Terminate / Reset の承認ワークフロー
+- Signal payload のJSON Schema検証
+- 操作ログの長期保存と検索
+- OpenTelemetry / Prometheus による外部監視連携
+- Runbook、インシデント管理、オンコール通知との連携

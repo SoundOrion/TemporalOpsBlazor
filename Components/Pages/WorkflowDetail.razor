@@ -8,9 +8,9 @@
 {
     <section class="empty-state">
         <p class="eyebrow">Workflow detail</p>
-        <h1>Workflowが見つかりません</h1>
-        <p>Workflow IDを確認してください。</p>
-        <button class="button" @onclick="BackToList">一覧へ戻る</button>
+        <h1>Workflow not found</h1>
+        <p>Check the Workflow ID and try again.</p>
+        <button class="button" @onclick="BackToList">Back to list</button>
     </section>
 }
 else
@@ -28,8 +28,8 @@ else
             </div>
         </div>
         <div class="detail-actions">
-            <button class="button button-ghost" @onclick="BackToList">戻る</button>
-            <button class="button" @onclick="() => _selectedWorkflow = workflow">運用操作</button>
+            <button class="button button-ghost" @onclick="BackToList">Back</button>
+            <button class="button" @onclick="() => _selectedWorkflow = workflow">Operator action</button>
         </div>
     </section>
 
@@ -55,7 +55,7 @@ else
                     <button class="pill" @onclick="() => StartSignal(signal)">@signal</button>
                 }
             </div>
-            <p class="muted-text">よく使うSignalをOperator Actionにプリセットできます。</p>
+            <p class="muted-text">Common signals can be prefilled in Operator Action.</p>
         </article>
 
         @if (_detail.ContinuationRuns.Count > 1)
@@ -64,7 +64,7 @@ else
                 <div class="panel-header">
                     <div>
                         <p class="eyebrow">Continue-As-New</p>
-                        <h2>Run chainを1つのWorkflowとして表示</h2>
+                        <h2>Grouped as one workflow run chain</h2>
                     </div>
                     <span class="chain-badge">@_detail.ContinuationRuns.Count runs</span>
                 </div>
