@@ -222,3 +222,7 @@ Workflowsページでは、Continue-As-NewがあるWorkflowだけでなく、単
 - 一覧上の表示項目は Run ID / Status / Start Time / Close Time / History / Latency / Run details に統一しています。
 
 これにより、Workflowの種類によって一覧の見え方や操作導線が変わらず、監視担当者は同じ目線でCurrent Runと詳細導線を確認できます。
+
+## v19 Activity visibility improvement
+
+Run Detail の Execution Motion では、Activities を 1 本の密集した横バーにまとめず、Activity ごとの行として表示するように変更しました。各行には Start / End / Duration / Event ID / Status と小さなローカルタイムラインを表示します。これにより、同一Run内でどのActivityが遅いか、失敗しているか、どのEvent範囲に対応するかを運用者が読み取りやすくなります。

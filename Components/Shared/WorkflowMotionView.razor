@@ -188,26 +188,33 @@ else
 
                             @if (activities.Count > 0)
                             {
-                                <div class="workflow-card-row">
+                                <div class="workflow-card-row workflow-card-row-activities">
                                     <div class="workflow-card-row-label">
                                         <strong>Activities</strong>
-                                        <span>@activities.Count major segment(s)</span>
+                                        <span>@activities.Count activity execution(s), shown as rows for operational review</span>
                                     </div>
-                                    <div class="workflow-card-track workflow-card-track-dense">
-                                        @if (IsCursorVisible(run.StartTime, run.EndTime))
+                                    <div class="workflow-activity-list" role="list" aria-label="Activity executions">
+                                        @foreach (var activity in activities.Take(40))
                                         {
-                                            <div class="workflow-card-cursor" style="@LocalCursorStyle(run.StartTime, run.EndTime)"><span>@PlaybackTimeText</span></div>
-                                        }
-                                        @foreach (var activity in activities.Take(80))
-                                        {
-                                            <button type="button" class="@SegmentClass(activity)" style="@DenseLocalSegmentStyle(activity, run.StartTime, run.EndTime)" @onclick="() => SelectSegment(activity)">
-                                                <span class="motion-segment-label">@activity.Label</span>
-                                                <small>@activity.Status</small>
+                                            <button type="button" class="@ActivityItemClass(activity)" style="@ActivityItemStyle(activity, run.StartTime, run.EndTime)" @onclick="() => SelectSegment(activity)" role="listitem">
+                                                <div class="workflow-activity-main">
+                                                    <span class="workflow-activity-name">@activity.Label</span>
+                                                    <StatusBadge Value="@activity.Status" />
+                                                </div>
+                                                <div class="workflow-activity-metrics">
+                                                    <span><strong>Start</strong>@FormatTime(activity.StartTime)</span>
+                                                    <span><strong>End</strong>@FormatActivityEndTime(activity)</span>
+                                                    <span><strong>Duration</strong>@DurationText(activity.StartTime, activity.EndTime)</span>
+                                                    <span><strong>Events</strong>@FormatEvents(activity.StartEventId, activity.EndEventId)</span>
+                                                </div>
+                                                <div class="workflow-activity-bar" aria-hidden="true">
+                                                    <span class="workflow-activity-bar-fill" style="@ActivityBarStyle(activity, run.StartTime, run.EndTime)"></span>
+                                                </div>
                                             </button>
                                         }
-                                        @if (activities.Count > 80)
+                                        @if (activities.Count > 40)
                                         {
-                                            <span class="motion-overflow-note">+@(activities.Count - 80) more</span>
+                                            <div class="workflow-activity-overflow">+@(activities.Count - 40) more activities. Use the history view for the full event list.</div>
                                         }
                                     </div>
                                 </div>
@@ -562,6 +569,30 @@ else
         return $"{baseStyle}top:{top}px;height:24px;bottom:auto;";
     }
 
+    private static string ActivityItemClass(WorkflowMotionSegment segment)
+    {
+        var classes = new List<string> { "workflow-activity-item" };
+        if (segment.IsProblem) classes.Add("is-problem");
+        if (segment.IsWaiting) classes.Add("is-waiting");
+        if (segment.Status == WorkflowStatus.Completed) classes.Add("is-completed");
+        if (segment.Status == WorkflowStatus.Failed || segment.Status == WorkflowStatus.TimedOut) classes.Add("is-failed");
+        return string.Join(" ", classes);
+    }
+
+    private string ActivityItemStyle(WorkflowMotionSegment segment, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    {
+        var left = LocalPercent(Max(segment.StartTime, windowStart), windowStart, windowEnd);
+        return $"--activity-offset:{left.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+    }
+
+    private string ActivityBarStyle(WorkflowMotionSegment segment, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    {
+        var left = LocalPercent(Max(segment.StartTime, windowStart), windowStart, windowEnd);
+        var right = LocalPercent(Min(segment.EndTime, windowEnd), windowStart, windowEnd);
+        var width = Math.Max(1.5m, right - left);
+        return $"left:{left.ToString("0.###", CultureInfo.InvariantCulture)}%;width:{width.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+    }
+
     private string LocalMarkerStyle(WorkflowMotionMarker marker, DateTimeOffset windowStart, DateTimeOffset windowEnd) =>
         $"left:{LocalPercent(marker.Timestamp, windowStart, windowEnd).ToString("0.###", CultureInfo.InvariantCulture)}%;";
 
@@ -613,6 +644,13 @@ else
     }
 
     private static string FormatDateTime(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+
+    private static string FormatTime(DateTimeOffset value) => value.ToLocalTime().ToString("HH:mm:ss");
+
+    private static string FormatActivityEndTime(WorkflowMotionSegment segment) =>
+        segment.IsWaiting || segment.IsCurrent
+            ? "running"
+            : FormatTime(segment.EndTime);
 
     private static string FormatEndTime(WorkflowMotionSegment segment) =>
         segment.IsWaiting || segment.IsCurrent

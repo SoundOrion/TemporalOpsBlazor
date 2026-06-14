@@ -2505,3 +2505,171 @@ textarea:focus-visible {
     border-color: rgba(84,216,146,.56);
     box-shadow: 0 0 0 4px rgba(84,216,146,.10), 0 0 18px rgba(84,216,146,.20);
 }
+
+/* v19: Run Detail activity readability -------------------------------------------------
+   Activities used to be compressed into a single dense track.  For operations review,
+   each activity is now rendered as an individual row with timing, status, event ids,
+   and a small local timeline bar. */
+.workflow-card-row-activities {
+    align-items: start;
+}
+
+.workflow-activity-list {
+    display: grid;
+    gap: .5rem;
+    min-width: 0;
+}
+
+.workflow-activity-item {
+    --activity-offset: 0%;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(220px, .9fr) minmax(420px, 1.35fr);
+    gap: .75rem;
+    align-items: center;
+    width: 100%;
+    min-height: 62px;
+    padding: .68rem .75rem .86rem;
+    border: 1px solid rgba(116,185,255,.16);
+    border-left: 3px solid rgba(116,185,255,.48);
+    border-radius: 15px;
+    background: linear-gradient(180deg, rgba(116,185,255,.055), rgba(255,255,255,.018)), rgba(5, 12, 27, .52);
+    color: rgba(255,255,255,.92);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.workflow-activity-item::before {
+    content: "";
+    position: absolute;
+    left: var(--activity-offset);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(31,215,255,.32);
+    opacity: .7;
+    pointer-events: none;
+}
+
+.workflow-activity-item:hover,
+.workflow-activity-item:focus-visible {
+    transform: translateY(-1px);
+    border-color: rgba(116,185,255,.38);
+    box-shadow: 0 10px 26px rgba(0,0,0,.22), 0 0 0 1px rgba(116,185,255,.08);
+    outline: none;
+}
+
+.workflow-activity-item.is-completed {
+    border-left-color: rgba(126,231,135,.52);
+}
+
+.workflow-activity-item.is-waiting {
+    border-left-color: rgba(255,211,105,.6);
+    background: linear-gradient(180deg, rgba(255,211,105,.065), rgba(255,255,255,.018)), rgba(5, 12, 27, .54);
+}
+
+.workflow-activity-item.is-problem,
+.workflow-activity-item.is-failed {
+    border-color: rgba(255,107,107,.28);
+    border-left-color: rgba(255,107,107,.78);
+    background: linear-gradient(180deg, rgba(255,107,107,.10), rgba(255,255,255,.018)), rgba(5, 12, 27, .56);
+}
+
+.workflow-activity-main {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+}
+
+.workflow-activity-name {
+    min-width: 0;
+    color: rgba(255,255,255,.95);
+    font-weight: 850;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workflow-activity-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .45rem;
+    min-width: 0;
+}
+
+.workflow-activity-metrics span {
+    min-width: 0;
+    color: rgba(255,255,255,.88);
+    font-size: .78rem;
+    font-weight: 750;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workflow-activity-metrics strong {
+    display: block;
+    margin-bottom: .08rem;
+    color: var(--muted);
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.workflow-activity-bar {
+    position: absolute;
+    left: .75rem;
+    right: .75rem;
+    bottom: .42rem;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.055);
+    overflow: hidden;
+}
+
+.workflow-activity-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(116,185,255,.55), rgba(31,215,255,.84));
+    box-shadow: 0 0 10px rgba(31,215,255,.16);
+}
+
+.workflow-activity-item.is-problem .workflow-activity-bar-fill,
+.workflow-activity-item.is-failed .workflow-activity-bar-fill {
+    background: linear-gradient(90deg, rgba(255,107,107,.7), rgba(255,174,66,.82));
+    box-shadow: 0 0 10px rgba(255,107,107,.16);
+}
+
+.workflow-activity-overflow {
+    padding: .58rem .75rem;
+    border: 1px dashed rgba(255,255,255,.16);
+    border-radius: 14px;
+    color: var(--muted);
+    background: rgba(255,255,255,.025);
+    font-size: .82rem;
+    font-weight: 750;
+}
+
+@media (max-width: 1100px) {
+    .workflow-activity-item {
+        grid-template-columns: 1fr;
+        gap: .45rem;
+    }
+
+    .workflow-activity-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .workflow-activity-metrics {
+        grid-template-columns: 1fr;
+    }
+}
