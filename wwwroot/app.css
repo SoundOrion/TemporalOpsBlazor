@@ -2448,3 +2448,21 @@ textarea:focus-visible {
         align-self: flex-start;
     }
 }
+
+/* v17: opened chains persist, but chains are not auto-expanded by default */
+.monitor-hint {
+    cursor: default;
+}
+
+.monitor-hint::before {
+    content: "↻";
+    width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(117,228,255,.10);
+    color: var(--accent);
+    font-size: .82rem;
+    font-weight: 900;
+}

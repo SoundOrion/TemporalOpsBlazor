@@ -8,7 +8,7 @@
     <div>
         <p class="eyebrow">Live Workflow Monitor</p>
         <h1>Monitor workflow executions by latest activity</h1>
-        <p>Keep Continue-As-New chains visible while the list refreshes. Latest current runs stay at the top for real-time operations.</p>
+        <p>Open only the chains you need. Expanded chains stay open across refreshes, and the latest current runs stay at the top for real-time monitoring.</p>
     </div>
     <button class="button" @onclick="SearchAsync" disabled="@_isSearching">@(_isSearching ? "Refreshing..." : "Refresh now")</button>
 </section>
@@ -51,11 +51,10 @@
         <span>Auto refresh</span>
         <small>10s interval</small>
     </label>
-    <label class="monitor-toggle">
-        <input type="checkbox" @bind="_keepRunChainsExpanded" />
-        <span>Keep chains expanded</span>
+    <div class="monitor-toggle monitor-hint" role="status">
+        <span>Opened chains persist</span>
         <small>refresh-safe tree state</small>
-    </label>
+    </div>
     <div class="monitor-status">
         <span class="live-dot"></span>
         <strong>@(_autoRefresh ? "Live monitoring" : "Manual refresh")</strong>
@@ -88,7 +87,7 @@ else
             </div>
             <small>Latest current run first</small>
         </div>
-        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" AutoExpandContinuationChains="@_keepRunChainsExpanded" />
+        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" />
     </section>
 }
 
@@ -101,7 +100,6 @@ else
     private string _statusText = string.Empty;
     private string _riskText = string.Empty;
     private bool _autoRefresh = true;
-    private bool _keepRunChainsExpanded = true;
     private bool _isSearching;
     private DateTimeOffset? _lastRefreshedAt;
     private CancellationTokenSource? _refreshCts;
