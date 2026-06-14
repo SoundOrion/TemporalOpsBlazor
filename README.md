@@ -226,3 +226,8 @@ Workflowsページでは、Continue-As-NewがあるWorkflowだけでなく、単
 ## v19 Activity visibility improvement
 
 Run Detail の Execution Motion では、Activities を 1 本の密集した横バーにまとめず、Activity ごとの行として表示するように変更しました。各行には Start / End / Duration / Event ID / Status と小さなローカルタイムラインを表示します。これにより、同一Run内でどのActivityが遅いか、失敗しているか、どのEvent範囲に対応するかを運用者が読み取りやすくなります。
+
+### v20: Run Details のActivity表示
+
+Run Details の Execution Motion では、Activity を途中で省略せず全件表示します。
+Activity ごとに Start / End / Duration / Event ID range を持つ行として表示し、長いRunでも途中で切れたように見えない構成にしています。

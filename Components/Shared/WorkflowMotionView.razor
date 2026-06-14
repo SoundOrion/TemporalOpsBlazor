@@ -171,16 +171,12 @@ else
                                         {
                                             <div class="workflow-card-cursor" style="@LocalCursorStyle(run.StartTime, run.EndTime)"><span>@PlaybackTimeText</span></div>
                                         }
-                                        @foreach (var child in children.Take(16))
+                                        @foreach (var child in children)
                                         {
                                             <button type="button" class="@SegmentClass(child)" style="@StackedLocalSegmentStyle(child, run.StartTime, run.EndTime, children.IndexOf(child))" @onclick="() => SelectSegment(child)">
                                                 <span class="motion-segment-label">@child.Label</span>
                                                 <small>@child.Status</small>
                                             </button>
-                                        }
-                                        @if (children.Count > 16)
-                                        {
-                                            <span class="motion-overflow-note">+@(children.Count - 16) more</span>
                                         }
                                     </div>
                                 </div>
@@ -194,7 +190,7 @@ else
                                         <span>@activities.Count activity execution(s), shown as rows for operational review</span>
                                     </div>
                                     <div class="workflow-activity-list" role="list" aria-label="Activity executions">
-                                        @foreach (var activity in activities.Take(40))
+                                        @foreach (var activity in activities)
                                         {
                                             <button type="button" class="@ActivityItemClass(activity)" style="@ActivityItemStyle(activity, run.StartTime, run.EndTime)" @onclick="() => SelectSegment(activity)" role="listitem">
                                                 <div class="workflow-activity-main">
@@ -212,10 +208,6 @@ else
                                                 </div>
                                             </button>
                                         }
-                                        @if (activities.Count > 40)
-                                        {
-                                            <div class="workflow-activity-overflow">+@(activities.Count - 40) more activities. Use the history view for the full event list.</div>
-                                        }
                                     </div>
                                 </div>
                             }
@@ -232,7 +224,7 @@ else
                                         {
                                             <div class="workflow-card-cursor" style="@LocalCursorStyle(run.StartTime, run.EndTime)"><span>@PlaybackTimeText</span></div>
                                         }
-                                        @foreach (var marker in markers.Take(40))
+                                        @foreach (var marker in markers)
                                         {
                                             <button type="button" class="@MarkerClass(marker)" style="@LocalMarkerStyle(marker, run.StartTime, run.EndTime)" title="@marker.Details" @onclick="() => SelectMarker(marker)">
                                                 <span>@marker.Label</span>

@@ -2506,10 +2506,11 @@ textarea:focus-visible {
     box-shadow: 0 0 0 4px rgba(84,216,146,.10), 0 0 18px rgba(84,216,146,.20);
 }
 
-/* v19: Run Detail activity readability -------------------------------------------------
-   Activities used to be compressed into a single dense track.  For operations review,
-   each activity is now rendered as an individual row with timing, status, event ids,
-   and a small local timeline bar. */
+/* v20: Run Detail activity readability -------------------------------------------------
+   Activities used to be compressed into a single dense track. For operations review,
+   each activity is rendered as an individual row with timing, status, event ids,
+   and a small local timeline bar. Activity rows are not hard-capped; the run detail
+   page shows the full activity list so it does not appear to stop midway. */
 .workflow-card-row-activities {
     align-items: start;
 }
