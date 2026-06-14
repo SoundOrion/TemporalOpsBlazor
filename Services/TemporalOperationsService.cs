@@ -147,12 +147,14 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             var history = new List<WorkflowHistoryEvent>();
             string inputJson = "{}";
             var count = 0;
+            var isFocusedRunDetail = !string.IsNullOrWhiteSpace(runId);
+            var historyDisplayLimit = Math.Max(1, _settings.HistoryEventLimit);
 
             await foreach (var ev in handle.FetchHistoryEventsAsync(
                 new WorkflowHistoryEventFetchOptions { Rpc = Rpc(cancellationToken) }).WithCancellation(cancellationToken))
             {
                 count++;
-                if (count > Math.Max(1, _settings.HistoryEventLimit))
+                if (!isFocusedRunDetail && count > historyDisplayLimit)
                 {
                     break;
                 }
@@ -729,7 +731,7 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             runHistories[currentHistoryRunId] = currentRunHistory;
         }
 
-        foreach (var run in runs.Take(50))
+        foreach (var run in runs)
         {
             if (string.IsNullOrWhiteSpace(run.RunId) || runHistories.ContainsKey(run.RunId))
             {
@@ -854,7 +856,6 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                 Segments = childSegments
                     .OrderBy(s => s.StartTime)
                     .ThenBy(s => s.Label, StringComparer.OrdinalIgnoreCase)
-                    .Take(120)
                     .ToList(),
                 Markers = childLaneMarkers,
             });
@@ -872,7 +873,6 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                 Segments = activitySegments
                     .OrderBy(s => s.StartTime)
                     .ThenByDescending(s => s.IsProblem)
-                    .Take(160)
                     .ToList(),
                 Markers = activityLaneMarkers,
             });
@@ -890,7 +890,6 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                 Segments = [],
                 Markers = operationalMarkers
                     .OrderBy(m => m.Timestamp)
-                    .Take(180)
                     .ToList(),
             });
         }
