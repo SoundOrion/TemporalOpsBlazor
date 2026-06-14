@@ -174,3 +174,15 @@ Execution Motion の Activities は、監視・障害一次切り分けで視認
 
 Run Details の Execution Motion では、Activity を途中で省略せず全件表示します。
 Activity ごとに Start / End / Duration / Event ID range を持つ行として表示し、長いRunでも途中で切れたように見えない構成にしています。
+
+## v21: 監視UIとしての運用改善
+
+Workflowsページは、TemporalのWorkflowを調査する画面ではなく、常時監視にも使える画面として調整しています。
+
+- 最新Current Runを持つWorkflowを上位に表示します。
+- PinされたWorkflowはさらに上位に表示されます。
+- Auto refresh後も、開いたExecution Treeとスクロール位置を維持します。
+- 前回取得結果との差分を比較し、変化したWorkflow/Runを一時的にハイライトします。
+- Run Detailsでは、History全体を見る前に `Problem first` で運用上先に確認すべき項目を提示します。
+
+差分検出はUI側の前回取得スナップショットとの比較で行っています。永続的な監査・メトリクス用途には、別途DBやObservability基盤への保存を推奨します。

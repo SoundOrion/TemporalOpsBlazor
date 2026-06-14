@@ -1,6 +1,8 @@
 @page "/workflows"
 @implements IAsyncDisposable
+@using Microsoft.JSInterop
 @inject ITemporalOperationsService Temporal
+@inject IJSRuntime JS
 
 <PageTitle>Workflows - TemporalOps</PageTitle>
 
@@ -8,7 +10,7 @@
     <div>
         <p class="eyebrow">Live Workflow Monitor</p>
         <h1>Monitor workflow executions by latest activity</h1>
-        <p>Open only the execution trees you need. Expanded trees stay open across refreshes, and the latest current runs stay at the top for real-time monitoring.</p>
+        <p>Open only the execution trees you need. Expanded trees, scroll position, filters, and pinned workflows stay stable across refreshes.</p>
     </div>
     <button class="button" @onclick="SearchAsync" disabled="@_isSearching">@(_isSearching ? "Refreshing..." : "Refresh now")</button>
 </section>
@@ -51,6 +53,11 @@
         <span>Auto refresh</span>
         <small>10s interval</small>
     </label>
+    <label class="monitor-toggle">
+        <input type="checkbox" @bind="_pinnedOnly" />
+        <span>Watch list only</span>
+        <small>@PinnedCountText</small>
+    </label>
     <div class="monitor-toggle monitor-hint" role="status">
         <span>Opened trees persist</span>
         <small>refresh-safe tree state</small>
@@ -58,7 +65,7 @@
     <div class="monitor-status">
         <span class="live-dot"></span>
         <strong>@(_autoRefresh ? "Live monitoring" : "Manual refresh")</strong>
-        <small>Sorted by latest current run</small>
+        <small>Changed rows pulse after refresh</small>
     </div>
     <div class="monitor-status monitor-status-right">
         <span>Last refresh</span>
@@ -70,11 +77,11 @@
 {
     <section class="loading-card">Loading workflows...</section>
 }
-else if (_items.Count == 0)
+else if (DisplayItems.Count == 0)
 {
     <section class="empty-state">
         <h2>No matching workflows</h2>
-        <p>Relax the filters or verify the Namespace and Task Queue.</p>
+        <p>@(_pinnedOnly ? "No pinned workflows match the current filters." : "Relax the filters or verify the Namespace and Task Queue.")</p>
     </section>
 }
 else
@@ -83,11 +90,16 @@ else
         <div class="panel-header">
             <div>
                 <p class="eyebrow">Results</p>
-                <h2>@_items.Count results</h2>
+                <h2>@DisplayItems.Count results</h2>
             </div>
-            <small>Latest current run first</small>
+            <small>Pinned first, then latest current run</small>
         </div>
-        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" />
+        <WorkflowTable Items="@DisplayItems"
+                       OnAction="OpenActionDrawer"
+                       OnPinToggled="TogglePinAsync"
+                       PinnedWorkflowIds="@_pinnedWorkflowIds"
+                       WorkflowChangeMessages="@_workflowChangeMessages"
+                       ChangedRunKeys="@_changedRunKeys" />
     </section>
 }
 
@@ -100,16 +112,80 @@ else
     private string _statusText = string.Empty;
     private string _riskText = string.Empty;
     private bool _autoRefresh = true;
+    private bool _pinnedOnly;
     private bool _isSearching;
+    private bool _hasRendered;
     private DateTimeOffset? _lastRefreshedAt;
     private CancellationTokenSource? _refreshCts;
     private Task? _refreshLoop;
+    private readonly HashSet<string> _pinnedWorkflowIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, WorkflowRowSnapshot> _previousSnapshots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _workflowChangeMessages = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _changedRunKeys = new(StringComparer.OrdinalIgnoreCase);
+    private System.Text.Json.JsonElement? _pendingViewport;
+    private bool _restoreViewportAfterRender;
+
+    private IReadOnlyList<WorkflowExecutionSummary> DisplayItems
+    {
+        get
+        {
+            if (_items is null)
+            {
+                return Array.Empty<WorkflowExecutionSummary>();
+            }
+
+            var result = _items.AsEnumerable();
+            if (_pinnedOnly)
+            {
+                result = result.Where(w => _pinnedWorkflowIds.Contains(w.WorkflowId));
+            }
+
+            return result
+                .OrderByDescending(w => _pinnedWorkflowIds.Contains(w.WorkflowId))
+                .ThenByDescending(LatestCurrentRunStart)
+                .ThenByDescending(w => w.Status == WorkflowStatus.Running)
+                .ThenByDescending(w => w.Risk)
+                .ThenBy(w => w.WorkflowId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    private string PinnedCountText => _pinnedWorkflowIds.Count == 1
+        ? "1 pinned workflow"
+        : $"{_pinnedWorkflowIds.Count} pinned workflows";
 
     protected override async Task OnInitializedAsync()
     {
         _refreshCts = new CancellationTokenSource();
         _refreshLoop = RunRefreshLoopAsync(_refreshCts.Token);
         await SearchAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _hasRendered = true;
+
+        if (firstRender)
+        {
+            await LoadPinnedWorkflowsAsync();
+            StateHasChanged();
+        }
+
+        if (_restoreViewportAfterRender && _pendingViewport.HasValue)
+        {
+            var viewport = _pendingViewport.Value;
+            _pendingViewport = null;
+            _restoreViewportAfterRender = false;
+
+            try
+            {
+                await JS.InvokeVoidAsync("temporalOps.restoreViewport", viewport);
+            }
+            catch (JSException)
+            {
+                // Best-effort only; monitoring should continue even if JS is unavailable.
+            }
+        }
     }
 
     private async Task SearchAsync()
@@ -119,13 +195,35 @@ else
             return;
         }
 
+        System.Text.Json.JsonElement? viewport = null;
+        if (_hasRendered && _items is not null)
+        {
+            try
+            {
+                viewport = await JS.InvokeAsync<System.Text.Json.JsonElement>("temporalOps.captureViewport");
+            }
+            catch (JSException)
+            {
+                viewport = null;
+            }
+        }
+
         try
         {
             _isSearching = true;
             _query.Status = Enum.TryParse<WorkflowStatus>(_statusText, out var status) ? status : null;
             _query.MinimumRisk = Enum.TryParse<RiskLevel>(_riskText, out var risk) ? risk : null;
-            _items = await Temporal.SearchWorkflowsAsync(_query);
+
+            var nextItems = await Temporal.SearchWorkflowsAsync(_query);
+            BuildChangeState(nextItems);
+            _items = nextItems;
             _lastRefreshedAt = DateTimeOffset.Now;
+
+            if (viewport.HasValue)
+            {
+                _pendingViewport = viewport.Value;
+                _restoreViewportAfterRender = true;
+            }
         }
         finally
         {
@@ -157,8 +255,136 @@ else
         }
     }
 
+    private async Task TogglePinAsync(WorkflowExecutionSummary workflow)
+    {
+        if (!_pinnedWorkflowIds.Add(workflow.WorkflowId))
+        {
+            _pinnedWorkflowIds.Remove(workflow.WorkflowId);
+        }
+
+        await SavePinnedWorkflowsAsync();
+    }
+
+    private async Task LoadPinnedWorkflowsAsync()
+    {
+        try
+        {
+            var pins = await JS.InvokeAsync<string[]>("temporalOps.loadPinnedWorkflows");
+            _pinnedWorkflowIds.Clear();
+            foreach (var pin in pins.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                _pinnedWorkflowIds.Add(pin);
+            }
+        }
+        catch (JSException)
+        {
+            // Keep in-memory pins only.
+        }
+    }
+
+    private async Task SavePinnedWorkflowsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("temporalOps.savePinnedWorkflows", _pinnedWorkflowIds.OrderBy(x => x).ToArray());
+        }
+        catch (JSException)
+        {
+            // Keep in-memory pins only.
+        }
+    }
+
+    private void BuildChangeState(IReadOnlyList<WorkflowExecutionSummary> nextItems)
+    {
+        _workflowChangeMessages.Clear();
+        _changedRunKeys.Clear();
+
+        if (_previousSnapshots.Count > 0)
+        {
+            foreach (var workflow in nextItems)
+            {
+                var nextSnapshot = WorkflowRowSnapshot.From(workflow);
+                if (!_previousSnapshots.TryGetValue(workflow.WorkflowId, out var previousSnapshot))
+                {
+                    _workflowChangeMessages[workflow.WorkflowId] = "New workflow";
+                    foreach (var key in nextSnapshot.Runs.Keys)
+                    {
+                        _changedRunKeys.Add(key);
+                    }
+
+                    continue;
+                }
+
+                var message = DescribeWorkflowChange(previousSnapshot, nextSnapshot);
+                if (!string.IsNullOrWhiteSpace(message))
+                {
+                    _workflowChangeMessages[workflow.WorkflowId] = message;
+                }
+
+                foreach (var run in nextSnapshot.Runs)
+                {
+                    if (!previousSnapshot.Runs.TryGetValue(run.Key, out var previousRun) || previousRun != run.Value)
+                    {
+                        _changedRunKeys.Add(run.Key);
+                    }
+                }
+            }
+        }
+
+        _previousSnapshots.Clear();
+        foreach (var snapshot in nextItems.Select(WorkflowRowSnapshot.From))
+        {
+            _previousSnapshots[snapshot.WorkflowId] = snapshot;
+        }
+    }
+
+    private static string DescribeWorkflowChange(WorkflowRowSnapshot previous, WorkflowRowSnapshot next)
+    {
+        if (previous.CurrentRunId != next.CurrentRunId)
+        {
+            return "Current run changed";
+        }
+
+        if (previous.Status != next.Status)
+        {
+            return $"Status {previous.Status} → {next.Status}";
+        }
+
+        if (previous.Risk != next.Risk)
+        {
+            return $"Risk {previous.Risk} → {next.Risk}";
+        }
+
+        if (previous.RunCount != next.RunCount)
+        {
+            return $"Run count {previous.RunCount} → {next.RunCount}";
+        }
+
+        if (previous.PendingActivities != next.PendingActivities)
+        {
+            return $"Pending {previous.PendingActivities} → {next.PendingActivities}";
+        }
+
+        if (previous.HistoryLength != next.HistoryLength)
+        {
+            return "History updated";
+        }
+
+        if (previous.ClosedAt != next.ClosedAt)
+        {
+            return next.ClosedAt is null ? "Reopened" : "Closed";
+        }
+
+        return string.Empty;
+    }
+
     private void OpenActionDrawer(WorkflowExecutionSummary workflow) => _selectedWorkflow = workflow;
     private void CloseActionDrawer() => _selectedWorkflow = null;
+
+    private static DateTimeOffset LatestCurrentRunStart(WorkflowExecutionSummary workflow) =>
+        workflow.ContinuationRuns.FirstOrDefault(r => r.IsCurrent)?.StartedAt
+        ?? workflow.ContinuationRuns.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt
+        ?? workflow.StartedAt;
 
     private static string FormatRefreshTime(DateTimeOffset? value) =>
         value?.ToLocalTime().ToString("HH:mm:ss") ?? "not yet";
@@ -182,4 +408,73 @@ else
             _refreshCts.Dispose();
         }
     }
+
+    private sealed record WorkflowRowSnapshot(
+        string WorkflowId,
+        string CurrentRunId,
+        WorkflowStatus Status,
+        RiskLevel Risk,
+        int RunCount,
+        int PendingActivities,
+        int HistoryLength,
+        DateTimeOffset? ClosedAt,
+        IReadOnlyDictionary<string, WorkflowRunSnapshot> Runs)
+    {
+        public static WorkflowRowSnapshot From(WorkflowExecutionSummary workflow)
+        {
+            var runs = workflow.ContinuationRuns.Count > 0
+                ? workflow.ContinuationRuns
+                : new List<WorkflowRunSummary>
+                {
+                    new()
+                    {
+                        WorkflowId = workflow.WorkflowId,
+                        RunId = workflow.RunId,
+                        Status = workflow.Status,
+                        TaskQueue = workflow.TaskQueue,
+                        StartedAt = workflow.StartedAt,
+                        ClosedAt = workflow.ClosedAt,
+                        HistoryLength = workflow.HistoryLength,
+                        LatencySeconds = workflow.LatencySeconds,
+                        IsCurrent = true
+                    }
+                };
+
+            var runSnapshots = runs
+                .GroupBy(r => RunKey(r.WorkflowId, r.RunId), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => WorkflowRunSnapshot.From(g.First()), StringComparer.OrdinalIgnoreCase);
+
+            return new WorkflowRowSnapshot(
+                workflow.WorkflowId,
+                workflow.RunId,
+                workflow.Status,
+                workflow.Risk,
+                runSnapshots.Count,
+                workflow.PendingActivities,
+                workflow.HistoryLength,
+                workflow.ClosedAt,
+                runSnapshots);
+        }
+    }
+
+    private sealed record WorkflowRunSnapshot(
+        string RunId,
+        WorkflowStatus Status,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? ClosedAt,
+        int HistoryLength,
+        decimal LatencySeconds,
+        bool IsCurrent)
+    {
+        public static WorkflowRunSnapshot From(WorkflowRunSummary run) => new(
+            run.RunId,
+            run.Status,
+            run.StartedAt,
+            run.ClosedAt,
+            run.HistoryLength,
+            Math.Round(run.LatencySeconds, 1),
+            run.IsCurrent);
+    }
+
+    private static string RunKey(string workflowId, string runId) => $"{workflowId}::{runId}";
 }

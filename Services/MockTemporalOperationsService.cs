@@ -83,6 +83,7 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
     {
         lock (_sync)
         {
+            AdvanceMockWorkflows(DateTimeOffset.Now);
             IEnumerable<WorkflowExecutionSummary> result = _workflows;
 
             if (!string.IsNullOrWhiteSpace(query.Keyword))
@@ -267,6 +268,20 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
             if (schedule is null) return Task.FromResult(OperationResult.Fail("Target schedule was not found."));
             schedule.IsPaused = false;
             return Task.FromResult(Audit("Unpause schedule", scheduleId, RiskLevel.Medium, reason));
+        }
+    }
+
+    private void AdvanceMockWorkflows(DateTimeOffset now)
+    {
+        foreach (var workflow in _workflows.Where(w => w.Status == WorkflowStatus.Running))
+        {
+            workflow.LatencySeconds = (decimal)Math.Max(0, (now - workflow.StartedAt).TotalSeconds);
+            workflow.HistoryLength += workflow.PendingActivities > 0 ? 2 : 1;
+
+            if (workflow.PendingActivities > 0 && now.Second % 4 == 0)
+            {
+                workflow.PendingActivities = Math.Max(0, workflow.PendingActivities - 1);
+            }
         }
     }
 

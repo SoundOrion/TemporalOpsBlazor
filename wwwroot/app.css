@@ -2674,3 +2674,210 @@ textarea:focus-visible {
         grid-template-columns: 1fr;
     }
 }
+
+/* v21: Live monitoring polish ---------------------------------------------------------
+   Refresh highlights, persistent viewport, watch list pinning, and problem-first run
+   detail summary for operator-oriented monitoring. */
+.monitor-strip {
+    grid-template-columns: minmax(170px, auto) minmax(185px, auto) minmax(210px, auto) minmax(240px, 1fr) auto;
+}
+
+.pin-toggle {
+    width: 26px;
+    height: 26px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 9px;
+    background: rgba(255,255,255,.045);
+    color: rgba(255,255,255,.58);
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+.pin-toggle:hover,
+.pin-toggle:focus-visible {
+    color: #fff1a8;
+    border-color: rgba(255,211,105,.36);
+    background: rgba(255,211,105,.075);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.pin-toggle.is-pinned {
+    color: #ffd369;
+    border-color: rgba(255,211,105,.46);
+    background: rgba(255,211,105,.12);
+    box-shadow: 0 0 18px rgba(255,211,105,.10);
+}
+
+.workflow-group-table tr.is-pinned > td {
+    background: linear-gradient(90deg, rgba(255,211,105,.045), rgba(255,255,255,0) 38%);
+}
+
+.workflow-group-table tr.is-live-changed > td,
+.chain-detail-row.is-live-changed > td,
+.chain-run.is-live-changed .chain-run-body {
+    animation: liveChangePulse 2.4s ease-out 1;
+}
+
+.chain-run.is-live-changed .chain-dot {
+    background: #ffd369;
+    border-color: rgba(255,211,105,.68);
+    box-shadow: 0 0 0 4px rgba(255,211,105,.13), 0 0 18px rgba(255,211,105,.22);
+}
+
+.change-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 2px;
+    padding: 3px 8px;
+    border: 1px solid rgba(255,211,105,.28);
+    border-radius: 999px;
+    background: rgba(255,211,105,.10);
+    color: #ffe49a;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.change-chip-inline {
+    margin-top: 0;
+    font-size: .62rem;
+}
+
+@keyframes liveChangePulse {
+    0% {
+        background-color: rgba(255,211,105,.18);
+        box-shadow: inset 0 0 0 999px rgba(255,211,105,.045);
+    }
+    45% {
+        background-color: rgba(255,211,105,.08);
+        box-shadow: inset 0 0 0 999px rgba(255,211,105,.018);
+    }
+    100% {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}
+
+.problem-first-summary {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(255,211,105,.14);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(255,211,105,.045), rgba(117,228,255,.025));
+}
+
+.problem-first-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.problem-first-head h3 {
+    margin: 0 0 3px;
+    font-size: 1rem;
+}
+
+.attention-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.attention-card {
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,.09);
+    border-left: 3px solid rgba(117,228,255,.44);
+    border-radius: 16px;
+    background: rgba(5,12,27,.48);
+    color: rgba(255,255,255,.92);
+    text-align: left;
+    cursor: pointer;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.attention-card:hover,
+.attention-card:focus-visible {
+    transform: translateY(-1px);
+    border-color: rgba(117,228,255,.30);
+    box-shadow: 0 12px 28px rgba(0,0,0,.20), 0 0 0 1px rgba(117,228,255,.07);
+    outline: none;
+}
+
+.attention-card-critical,
+.attention-card-high {
+    border-left-color: rgba(255,107,107,.82);
+    background: linear-gradient(180deg, rgba(255,107,107,.08), rgba(255,255,255,.018)), rgba(5,12,27,.52);
+}
+
+.attention-card-medium {
+    border-left-color: rgba(255,211,105,.72);
+    background: linear-gradient(180deg, rgba(255,211,105,.065), rgba(255,255,255,.018)), rgba(5,12,27,.50);
+}
+
+.attention-card-low {
+    border-left-color: rgba(84,216,146,.62);
+}
+
+.attention-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.attention-card-head strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attention-card p {
+    margin: 0;
+    color: rgba(255,255,255,.78);
+    font-size: .84rem;
+    line-height: 1.38;
+}
+
+.attention-card small {
+    margin-top: auto;
+    color: var(--muted);
+    font-size: .76rem;
+    font-weight: 750;
+    line-height: 1.35;
+}
+
+@media (max-width: 1180px) {
+    .monitor-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .monitor-status-right {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 720px) {
+    .problem-first-head {
+        flex-direction: column;
+    }
+
+    .attention-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -19,10 +19,16 @@
         @foreach (var workflow in Items)
         {
             var isExpanded = IsExpanded(workflow);
+            var isPinned = IsPinned(workflow);
+            var changeMessage = ChangeMessage(workflow);
+            var hasChange = !string.IsNullOrWhiteSpace(changeMessage);
             var runs = OrderedRuns(workflow).ToList();
-            <tr class="@RowClass(workflow, isExpanded)">
+            <tr class="@RowClass(workflow, isExpanded, isPinned, hasChange)">
                 <td>
                     <div class="workflow-cell workflow-cell-with-toggle">
+                        <button class="@PinButtonClass(isPinned)" title="@(isPinned ? "Remove from watch list" : "Add to watch list")" aria-label="@(isPinned ? "Remove from watch list" : "Add to watch list")" @onclick="() => TogglePinAsync(workflow)">
+                            <span>@(isPinned ? "★" : "☆")</span>
+                        </button>
                         <button class="chain-toggle" title="@ToggleTitle(isExpanded)" aria-label="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
                             <span class="@ToggleIconClass(isExpanded)">▾</span>
                         </button>
@@ -30,6 +36,10 @@
                             <strong>@workflow.WorkflowId</strong>
                             <span>@workflow.WorkflowType</span>
                             <small class="chain-note">current run: <code>@ShortRunId(workflow.RunId)</code></small>
+                            @if (hasChange)
+                            {
+                                <small class="change-chip">@changeMessage</small>
+                            }
                         </div>
                     </div>
                 </td>
@@ -51,7 +61,7 @@
             </tr>
             @if (isExpanded)
             {
-                <tr class="chain-detail-row">
+                <tr class="chain-detail-row @(hasChange ? "is-live-changed" : null)">
                     <td colspan="9">
                         <div class="chain-detail">
                             <div class="chain-detail-header">
@@ -59,12 +69,13 @@
                                     <strong>Execution tree</strong>
                                     <small>@TreeDescriptor(workflow, runs.Count)</small>
                                 </div>
-                                <span>Current run first. Opened trees stay open after refresh. Run details inspect that execution only.</span>
+                                <span>Current run first. Run details inspect that execution only.</span>
                             </div>
                             <div class="chain-timeline">
                                 @foreach (var run in runs)
                                 {
-                                    <div class="@ChainRunClass(run)">
+                                    var runChanged = IsRunChanged(run);
+                                    <div class="@ChainRunClass(run, runChanged)">
                                         <div class="chain-dot"></div>
                                         <div class="chain-run-body">
                                             <div class="chain-run-grid detail-run-grid-with-action">
@@ -75,6 +86,10 @@
                                                         @if (run.IsCurrent)
                                                         {
                                                             <span class="current-chip">current</span>
+                                                        }
+                                                        @if (runChanged)
+                                                        {
+                                                            <span class="change-chip change-chip-inline">updated</span>
                                                         }
                                                     </div>
                                                 </div>
@@ -119,6 +134,11 @@
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<WorkflowExecutionSummary> Items { get; set; } = [];
     [Parameter] public EventCallback<WorkflowExecutionSummary> OnAction { get; set; }
+    [Parameter] public EventCallback<WorkflowExecutionSummary> OnPinToggled { get; set; }
+    [Parameter] public IReadOnlySet<string> PinnedWorkflowIds { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    [Parameter] public IReadOnlyDictionary<string, string> WorkflowChangeMessages { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    [Parameter] public IReadOnlySet<string> ChangedRunKeys { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     private readonly HashSet<string> _expandedWorkflowIds = new(StringComparer.OrdinalIgnoreCase);
 
     private void OpenGroupedDetail(WorkflowExecutionSummary workflow) =>
@@ -132,8 +152,16 @@
         }
     }
 
+    private Task TogglePinAsync(WorkflowExecutionSummary workflow) => OnPinToggled.InvokeAsync(workflow);
+
     private bool IsExpanded(WorkflowExecutionSummary workflow) =>
         _expandedWorkflowIds.Contains(workflow.WorkflowId);
+
+    private bool IsPinned(WorkflowExecutionSummary workflow) =>
+        PinnedWorkflowIds.Contains(workflow.WorkflowId);
+
+    private string ChangeMessage(WorkflowExecutionSummary workflow) =>
+        WorkflowChangeMessages.TryGetValue(workflow.WorkflowId, out var message) ? message : string.Empty;
 
     private void Toggle(WorkflowExecutionSummary workflow)
     {
@@ -170,19 +198,32 @@
     private static string ToggleTitle(bool isExpanded) =>
         isExpanded ? "Collapse execution tree" : "Show execution tree";
 
-    private static string RowClass(WorkflowExecutionSummary workflow, bool isExpanded)
+    private static string RowClass(WorkflowExecutionSummary workflow, bool isExpanded, bool isPinned, bool hasChange)
     {
         var classes = new List<string> { "has-tree" };
         if (workflow.HasContinuationChain) classes.Add("has-chain");
         if (isExpanded) classes.Add("is-expanded");
+        if (isPinned) classes.Add("is-pinned");
+        if (hasChange) classes.Add("is-live-changed");
         return string.Join(" ", classes);
     }
 
     private static string ToggleIconClass(bool isExpanded) =>
         isExpanded ? "is-open" : string.Empty;
 
-    private static string ChainRunClass(WorkflowRunSummary run) =>
-        run.IsCurrent ? "chain-run is-current" : "chain-run";
+    private static string PinButtonClass(bool isPinned) =>
+        isPinned ? "pin-toggle is-pinned" : "pin-toggle";
+
+    private bool IsRunChanged(WorkflowRunSummary run) =>
+        ChangedRunKeys.Contains(RunKey(run.WorkflowId, run.RunId));
+
+    private string ChainRunClass(WorkflowRunSummary run, bool isChanged)
+    {
+        var classes = new List<string> { "chain-run" };
+        if (run.IsCurrent) classes.Add("is-current");
+        if (isChanged) classes.Add("is-live-changed");
+        return string.Join(" ", classes);
+    }
 
     private static string TreeDescriptor(WorkflowExecutionSummary workflow, int runCount)
     {
@@ -211,4 +252,6 @@
 
         return runId.Length <= 8 ? runId : runId[..8];
     }
+
+    private static string RunKey(string workflowId, string runId) => $"{workflowId}::{runId}";
 }

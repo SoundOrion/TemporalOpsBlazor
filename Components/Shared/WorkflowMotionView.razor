@@ -62,6 +62,30 @@ else
             </div>
         </div>
 
+        <section class="problem-first-summary" aria-label="Problem first summary">
+            <div class="problem-first-head">
+                <div>
+                    <p class="eyebrow">Problem first</p>
+                    <h3>What needs attention</h3>
+                    <p class="muted-text">The most important findings, waiting work, failed children, and slow activities are promoted here before the full motion view.</p>
+                </div>
+                <span class="motion-card-count">@AttentionItems.Count item(s)</span>
+            </div>
+            <div class="attention-grid">
+                @foreach (var item in AttentionItems)
+                {
+                    <button type="button" class="@AttentionClass(item)" @onclick="() => SelectAttention(item)">
+                        <div class="attention-card-head">
+                            <StatusBadge Value="@item.Severity" />
+                            <strong>@item.Title</strong>
+                        </div>
+                        <p>@item.Description</p>
+                        <small>@item.Action</small>
+                    </button>
+                }
+            </div>
+        </section>
+
         <div class="motion-toolbar">
             <div class="motion-playback-buttons">
                 <button class="button button-compact" @onclick="TogglePlaybackAsync">@(_isPlaying ? "Pause" : "Play")</button>
@@ -373,6 +397,120 @@ else
         .OrderBy(s => s.StartTime)
         .ToList() ?? [];
 
+    private IReadOnlyList<MotionAttentionItem> AttentionItems => BuildAttentionItems();
+
+    private IReadOnlyList<MotionAttentionItem> BuildAttentionItems()
+    {
+        var items = new List<MotionAttentionItem>();
+
+        foreach (var finding in Motion.Findings
+                     .OrderByDescending(f => f.Severity)
+                     .ThenBy(f => f.EventId ?? long.MaxValue)
+                     .Take(4))
+        {
+            items.Add(new MotionAttentionItem(
+                finding.Severity,
+                finding.Title,
+                finding.Description,
+                finding.RecommendedAction,
+                null,
+                null));
+        }
+
+        foreach (var child in ChildSegments
+                     .Where(s => s.IsProblem || s.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut or WorkflowStatus.Terminated or WorkflowStatus.Cancelled)
+                     .OrderByDescending(s => s.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut or WorkflowStatus.Terminated)
+                     .ThenByDescending(s => s.StartTime)
+                     .Take(3))
+        {
+            items.Add(new MotionAttentionItem(
+                RiskLevel.High,
+                $"Child workflow: {child.Label}",
+                $"{child.Status} from {FormatDateTime(child.StartTime)} to {FormatEndTime(child)}.",
+                "Open the related child workflow or inspect the segment below.",
+                child,
+                null));
+        }
+
+        foreach (var activity in ActivitySegments
+                     .Where(s => s.IsProblem || s.Status is WorkflowStatus.Failed or WorkflowStatus.TimedOut or WorkflowStatus.Terminated or WorkflowStatus.Cancelled)
+                     .OrderByDescending(s => s.StartTime)
+                     .Take(4))
+        {
+            items.Add(new MotionAttentionItem(
+                RiskLevel.High,
+                $"Activity issue: {activity.Label}",
+                $"{activity.Status} after {DurationText(activity.StartTime, activity.EndTime)}. Events {FormatEvents(activity.StartEventId, activity.EndEventId)}.",
+                "Select this activity to inspect timing and event boundaries.",
+                activity,
+                null));
+        }
+
+        foreach (var waiting in ActivitySegments
+                     .Where(s => s.IsWaiting || s.Status == WorkflowStatus.Running)
+                     .OrderByDescending(s => s.EndTime - s.StartTime)
+                     .Take(2))
+        {
+            items.Add(new MotionAttentionItem(
+                waiting.IsProblem ? RiskLevel.High : RiskLevel.Medium,
+                $"Waiting activity: {waiting.Label}",
+                $"Still open for {DurationText(waiting.StartTime, waiting.EndTime)} since {FormatDateTime(waiting.StartTime)}.",
+                "Check whether this is expected waiting time or a stuck execution.",
+                waiting,
+                null));
+        }
+
+        var slowestActivity = ActivitySegments
+            .OrderByDescending(s => s.EndTime - s.StartTime)
+            .FirstOrDefault();
+
+        if (slowestActivity is not null && items.All(i => i.Segment?.Id != slowestActivity.Id))
+        {
+            items.Add(new MotionAttentionItem(
+                slowestActivity.IsProblem ? RiskLevel.High : RiskLevel.Low,
+                $"Longest activity: {slowestActivity.Label}",
+                $"Duration {DurationText(slowestActivity.StartTime, slowestActivity.EndTime)}. This is the largest time consumer in the selected run.",
+                "Use this as the first performance checkpoint if no explicit failure exists.",
+                slowestActivity,
+                null));
+        }
+
+        if (items.Count == 0)
+        {
+            items.Add(new MotionAttentionItem(
+                RiskLevel.Low,
+                "No immediate problem detected",
+                "No failed, timed out, waiting, or high-severity motion finding was detected in this run.",
+                "Continue monitoring. Use the full activity list if deeper verification is needed.",
+                null,
+                null));
+        }
+
+        return items
+            .GroupBy(i => $"{i.Title}|{i.Description}", StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderByDescending(i => i.Severity)
+            .Take(8)
+            .ToList();
+    }
+
+    private void SelectAttention(MotionAttentionItem item)
+    {
+        if (item.Segment is not null)
+        {
+            SelectSegment(item.Segment);
+            return;
+        }
+
+        if (item.Marker is not null)
+        {
+            SelectMarker(item.Marker);
+        }
+    }
+
+    private static string AttentionClass(MotionAttentionItem item) =>
+        $"attention-card attention-card-{item.Severity.ToString().ToLowerInvariant()}";
+
     private bool HasProblems => Motion.Findings.Any(f => f.Severity >= RiskLevel.High)
         || Motion.Lanes.SelectMany(l => l.Segments).Any(s => s.IsProblem)
         || Motion.Lanes.SelectMany(l => l.Markers).Any(m => m.IsProblem);
@@ -672,6 +810,14 @@ else
         if (string.IsNullOrWhiteSpace(value)) return "-";
         return value.Length <= 8 ? value : value[..8];
     }
+
+    private sealed record MotionAttentionItem(
+        RiskLevel Severity,
+        string Title,
+        string Description,
+        string Action,
+        WorkflowMotionSegment? Segment,
+        WorkflowMotionMarker? Marker);
 
     public ValueTask DisposeAsync()
     {
