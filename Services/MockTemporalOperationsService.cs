@@ -113,8 +113,9 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
             var grouped = GroupContinuationRuns(result);
 
             return Task.FromResult<IReadOnlyList<WorkflowExecutionSummary>>(grouped
-                .OrderByDescending(x => x.Risk)
-                .ThenByDescending(x => x.StartedAt)
+                .OrderByDescending(LatestCurrentRunStart)
+                .ThenByDescending(x => x.Status == WorkflowStatus.Running)
+                .ThenByDescending(x => x.Risk)
                 .ToList());
         }
     }
@@ -320,6 +321,12 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
             })
             .ToList();
     }
+
+
+    private static DateTimeOffset LatestCurrentRunStart(WorkflowExecutionSummary workflow) =>
+        workflow.ContinuationRuns.FirstOrDefault(r => r.IsCurrent)?.StartedAt
+        ?? workflow.ContinuationRuns.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt
+        ?? workflow.StartedAt;
 
     private static WorkflowRunSummary ToRunSummary(WorkflowExecutionSummary summary, bool isCurrent) => new()
     {

@@ -122,8 +122,9 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         }
 
         return workflows
-            .OrderByDescending(w => w.Risk)
-            .ThenByDescending(w => w.StartedAt)
+            .OrderByDescending(LatestCurrentRunStart)
+            .ThenByDescending(w => w.Status == OpsWorkflowStatus.Running)
+            .ThenByDescending(w => w.Risk)
             .ToList();
     }
 
@@ -587,6 +588,12 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             ContinuationRuns = ordered,
         };
     }
+
+
+    private static DateTimeOffset LatestCurrentRunStart(WorkflowExecutionSummary workflow) =>
+        workflow.ContinuationRuns.FirstOrDefault(r => r.IsCurrent)?.StartedAt
+        ?? workflow.ContinuationRuns.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt
+        ?? workflow.StartedAt;
 
     private static WorkflowRunSummary ChooseCurrentRun(IReadOnlyList<WorkflowRunSummary> runs)
     {

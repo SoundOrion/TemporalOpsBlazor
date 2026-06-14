@@ -24,7 +24,7 @@
                     <div class="workflow-cell workflow-cell-with-toggle">
                         @if (workflow.HasContinuationChain)
                         {
-                            <button class="chain-toggle" title="Show run chain" aria-label="Show Continue-As-New run chain" @onclick="() => Toggle(workflow)">
+                            <button class="chain-toggle" title="@ToggleTitle(isExpanded)" aria-label="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
                                 <span class="@ToggleIconClass(isExpanded)">▾</span>
                             </button>
                         }
@@ -47,7 +47,7 @@
                 <td>
                     @if (workflow.HasContinuationChain)
                     {
-                        <button class="chain-badge" title="Show Continue-As-New run chain" @onclick="() => Toggle(workflow)">
+                        <button class="chain-badge" title="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
                             Continue-As-New × @workflow.ContinuationRunCount
                         </button>
                     }
@@ -72,10 +72,10 @@
                         <div class="chain-detail">
                             <div class="chain-detail-header">
                                 <strong>Continue-As-New run chain</strong>
-                                <span>Oldest to newest. Actions target the current run. Open a run detail to inspect that execution only.</span>
+                                <span>Current run first, then newest to oldest. Refresh keeps this tree open for live monitoring.</span>
                             </div>
                             <div class="chain-timeline">
-                                @foreach (var run in workflow.ContinuationRuns.OrderBy(r => r.StartedAt))
+                                @foreach (var run in OrderedRuns(workflow))
                                 {
                                     <div class="@ChainRunClass(run)">
                                         <div class="chain-dot"></div>
@@ -132,8 +132,10 @@
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<WorkflowExecutionSummary> Items { get; set; } = [];
     [Parameter] public EventCallback<WorkflowExecutionSummary> OnAction { get; set; }
+    [Parameter] public bool AutoExpandContinuationChains { get; set; }
 
     private readonly HashSet<string> _expandedWorkflowIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _collapsedWorkflowIds = new(StringComparer.OrdinalIgnoreCase);
 
     private void OpenGroupedDetail(WorkflowExecutionSummary workflow) =>
         Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(workflow.WorkflowId)}");
@@ -146,15 +148,43 @@
         }
     }
 
-    private bool IsExpanded(WorkflowExecutionSummary workflow) => _expandedWorkflowIds.Contains(workflow.WorkflowId);
+    private bool IsExpanded(WorkflowExecutionSummary workflow)
+    {
+        if (!workflow.HasContinuationChain)
+        {
+            return false;
+        }
+
+        return AutoExpandContinuationChains
+            ? !_collapsedWorkflowIds.Contains(workflow.WorkflowId)
+            : _expandedWorkflowIds.Contains(workflow.WorkflowId);
+    }
 
     private void Toggle(WorkflowExecutionSummary workflow)
     {
+        if (AutoExpandContinuationChains)
+        {
+            if (!_collapsedWorkflowIds.Add(workflow.WorkflowId))
+            {
+                _collapsedWorkflowIds.Remove(workflow.WorkflowId);
+            }
+
+            return;
+        }
+
         if (!_expandedWorkflowIds.Add(workflow.WorkflowId))
         {
             _expandedWorkflowIds.Remove(workflow.WorkflowId);
         }
     }
+
+    private static IEnumerable<WorkflowRunSummary> OrderedRuns(WorkflowExecutionSummary workflow) =>
+        workflow.ContinuationRuns
+            .OrderByDescending(r => r.IsCurrent)
+            .ThenByDescending(r => r.StartedAt);
+
+    private static string ToggleTitle(bool isExpanded) =>
+        isExpanded ? "Collapse run chain" : "Show run chain";
 
     private static string RowClass(WorkflowExecutionSummary workflow, bool isExpanded)
     {

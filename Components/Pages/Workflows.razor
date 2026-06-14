@@ -1,15 +1,16 @@
 @page "/workflows"
+@implements IAsyncDisposable
 @inject ITemporalOperationsService Temporal
 
 <PageTitle>Workflows - TemporalOps</PageTitle>
 
 <section class="page-heading">
     <div>
-        <p class="eyebrow">Workflow Search</p>
-        <h1>Search and operate workflow executions</h1>
-        <p>Filter by Workflow ID, Run ID, type, owner, or Search Attributes, then take controlled operator actions.</p>
+        <p class="eyebrow">Live Workflow Monitor</p>
+        <h1>Monitor workflow executions by latest activity</h1>
+        <p>Keep Continue-As-New chains visible while the list refreshes. Latest current runs stay at the top for real-time operations.</p>
     </div>
-    <button class="button" @onclick="SearchAsync">Search again</button>
+    <button class="button" @onclick="SearchAsync" disabled="@_isSearching">@(_isSearching ? "Refreshing..." : "Refresh now")</button>
 </section>
 
 <section class="filter-panel">
@@ -41,7 +42,29 @@
             }
         </select>
     </label>
-    <button class="button button-compact" @onclick="SearchAsync">Search</button>
+    <button class="button button-compact" @onclick="SearchAsync" disabled="@_isSearching">Search</button>
+</section>
+
+<section class="monitor-strip" aria-label="Workflow monitoring controls">
+    <label class="monitor-toggle">
+        <input type="checkbox" @bind="_autoRefresh" />
+        <span>Auto refresh</span>
+        <small>10s interval</small>
+    </label>
+    <label class="monitor-toggle">
+        <input type="checkbox" @bind="_keepRunChainsExpanded" />
+        <span>Keep chains expanded</span>
+        <small>refresh-safe tree state</small>
+    </label>
+    <div class="monitor-status">
+        <span class="live-dot"></span>
+        <strong>@(_autoRefresh ? "Live monitoring" : "Manual refresh")</strong>
+        <small>Sorted by latest current run</small>
+    </div>
+    <div class="monitor-status monitor-status-right">
+        <span>Last refresh</span>
+        <strong>@FormatRefreshTime(_lastRefreshedAt)</strong>
+    </div>
 </section>
 
 @if (_items is null)
@@ -63,9 +86,9 @@ else
                 <p class="eyebrow">Results</p>
                 <h2>@_items.Count results</h2>
             </div>
-            <small>Sorted by operational risk</small>
+            <small>Latest current run first</small>
         </div>
-        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" />
+        <WorkflowTable Items="@_items" OnAction="OpenActionDrawer" AutoExpandContinuationChains="@_keepRunChainsExpanded" />
     </section>
 }
 
@@ -77,16 +100,88 @@ else
     private WorkflowExecutionSummary? _selectedWorkflow;
     private string _statusText = string.Empty;
     private string _riskText = string.Empty;
+    private bool _autoRefresh = true;
+    private bool _keepRunChainsExpanded = true;
+    private bool _isSearching;
+    private DateTimeOffset? _lastRefreshedAt;
+    private CancellationTokenSource? _refreshCts;
+    private Task? _refreshLoop;
 
-    protected override Task OnInitializedAsync() => SearchAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _refreshCts = new CancellationTokenSource();
+        _refreshLoop = RunRefreshLoopAsync(_refreshCts.Token);
+        await SearchAsync();
+    }
 
     private async Task SearchAsync()
     {
-        _query.Status = Enum.TryParse<WorkflowStatus>(_statusText, out var status) ? status : null;
-        _query.MinimumRisk = Enum.TryParse<RiskLevel>(_riskText, out var risk) ? risk : null;
-        _items = await Temporal.SearchWorkflowsAsync(_query);
+        if (_isSearching)
+        {
+            return;
+        }
+
+        try
+        {
+            _isSearching = true;
+            _query.Status = Enum.TryParse<WorkflowStatus>(_statusText, out var status) ? status : null;
+            _query.MinimumRisk = Enum.TryParse<RiskLevel>(_riskText, out var risk) ? risk : null;
+            _items = await Temporal.SearchWorkflowsAsync(_query);
+            _lastRefreshedAt = DateTimeOffset.Now;
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_autoRefresh)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await SearchAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Component is being disposed.
+        }
     }
 
     private void OpenActionDrawer(WorkflowExecutionSummary workflow) => _selectedWorkflow = workflow;
     private void CloseActionDrawer() => _selectedWorkflow = null;
+
+    private static string FormatRefreshTime(DateTimeOffset? value) =>
+        value?.ToLocalTime().ToString("HH:mm:ss") ?? "not yet";
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshCts is not null)
+        {
+            await _refreshCts.CancelAsync();
+            if (_refreshLoop is not null)
+            {
+                try
+                {
+                    await _refreshLoop;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+
+            _refreshCts.Dispose();
+        }
+    }
 }

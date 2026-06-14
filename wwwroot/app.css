@@ -2325,3 +2325,126 @@ textarea:focus-visible {
         width: 100%;
     }
 }
+
+/* v16 live monitoring refinements */
+.monitor-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(190px, auto)) minmax(240px, 1fr) auto;
+    gap: 10px;
+    align-items: stretch;
+    padding: 12px;
+    border: 1px solid rgba(117,228,255,.12);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(117,228,255,.045), rgba(255,255,255,.025));
+}
+
+.monitor-toggle,
+.monitor-status {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    background: rgba(6,12,28,.34);
+    color: var(--text);
+    font-weight: 800;
+}
+
+.monitor-toggle {
+    cursor: pointer;
+}
+
+.monitor-toggle input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+}
+
+.monitor-toggle span,
+.monitor-status strong {
+    white-space: nowrap;
+}
+
+.monitor-toggle small,
+.monitor-status small,
+.monitor-status span:not(.live-dot) {
+    color: var(--muted);
+    font-size: .76rem;
+    font-weight: 750;
+}
+
+.monitor-status {
+    justify-content: flex-start;
+}
+
+.monitor-status-right {
+    justify-content: flex-end;
+    min-width: 168px;
+}
+
+.live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--success);
+    box-shadow: 0 0 0 5px rgba(84,216,146,.10), 0 0 18px rgba(84,216,146,.24);
+    flex: 0 0 auto;
+}
+
+.workflow-group-table tr.is-expanded > td {
+    border-bottom-color: rgba(117,228,255,.14);
+}
+
+.chain-detail-header span {
+    color: #aac3ef;
+}
+
+.chain-run.is-current {
+    order: -1;
+}
+
+.chain-run.is-current .chain-run-body::before {
+    content: "Active execution";
+    display: inline-flex;
+    margin-bottom: 7px;
+    padding: 3px 8px;
+    border: 1px solid rgba(84,216,146,.24);
+    border-radius: 999px;
+    background: rgba(84,216,146,.10);
+    color: #a9f5c9;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 1100px) {
+    .monitor-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .monitor-status-right {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 720px) {
+    .monitor-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .monitor-toggle,
+    .monitor-status {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .monitor-toggle input {
+        align-self: flex-start;
+    }
+}
