@@ -1,0 +1,366 @@
+@inject NavigationManager Nav
+
+@if (Motion is null || Motion.Lanes.Count == 0)
+{
+    <div class="workflow-motion-preview is-empty">
+        <strong>No motion data available</strong>
+        <span>Open the grouped workflow detail page to inspect raw history events.</span>
+    </div>
+}
+else
+{
+    <section class="workflow-motion-preview">
+        <div class="workflow-motion-preview-head">
+            <div>
+                <p class="eyebrow">Workflow Motion</p>
+                <h3>Motion preview by workflow execution</h3>
+                <p>Each run is shown as an individual motion card. Use the detail links to inspect that exact workflow execution.</p>
+            </div>
+            <div class="workflow-motion-preview-actions">
+                <div class="motion-preview-state">
+                    <span>Current state</span>
+                    <strong>@Motion.CurrentState</strong>
+                </div>
+                <button class="button button-ghost button-compact" @onclick="OpenGroupedDetail">Grouped detail</button>
+            </div>
+        </div>
+
+        <div class="motion-preview-kpis">
+            <div><span>Runs</span><strong>@Motion.RunCount</strong></div>
+            <div><span>Children</span><strong>@Motion.ChildWorkflowCount</strong></div>
+            <div><span>Activities</span><strong>@Motion.ActivityCount</strong></div>
+            <div class="@(Motion.ProblemCount > 0 ? "has-problem" : string.Empty)"><span>Problems</span><strong>@Motion.ProblemCount</strong></div>
+            <div class="motion-preview-window"><span>Window</span><strong>@FormatRange(Motion.TimelineStart, Motion.TimelineEnd)</strong></div>
+        </div>
+
+        <div class="motion-preview-execution-list">
+            @foreach (var run in RunSegments)
+            {
+                var activities = ActivitySegments
+                    .Where(activity => IsSameRun(activity.RunId, run.RunId))
+                    .OrderBy(activity => activity.StartTime)
+                    .ToList();
+                var children = ChildSegments
+                    .Where(child => Overlaps(child.StartTime, child.EndTime, run.StartTime, run.EndTime))
+                    .OrderBy(child => child.StartTime)
+                    .ToList();
+                var markers = MarkersForWindow(run.StartTime, run.EndTime)
+                    .OrderBy(marker => marker.Timestamp)
+                    .ToList();
+
+                <article class="@PreviewCardClass(run)">
+                    <div class="motion-preview-card-head">
+                        <div class="motion-preview-titleline">
+                            <span class="motion-preview-run-index">@RunOrdinal(run)</span>
+                            <div>
+                                <strong>@(run.IsCurrent ? "Current workflow execution" : "Workflow execution")</strong>
+                                <code>@ShortId(run.RunId)</code>
+                                @if (run.IsCurrent)
+                                {
+                                    <span class="current-chip">current</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="motion-preview-meta-row">
+                            <div><span>Status</span><StatusBadge Value="@run.Status" /></div>
+                            <div><span>Start</span><strong>@FormatDateTime(run.StartTime)</strong></div>
+                            <div><span>Close</span><strong>@FormatEndTime(run)</strong></div>
+                            <div><span>Duration</span><strong>@DurationText(run.StartTime, run.EndTime)</strong></div>
+                        </div>
+                        <div class="motion-preview-card-actions">
+                            <button class="button button-ghost button-compact" @onclick="() => OpenRunDetail(run)">Run detail</button>
+                        </div>
+                    </div>
+
+                    <div class="motion-preview-track-block">
+                        <div class="motion-preview-track-label">
+                            <strong>Run motion</strong>
+                            <span>Execution lifetime with live cursor</span>
+                        </div>
+                        <div class="motion-preview-track">
+                            <div class="motion-preview-auto-cursor"></div>
+                            <button type="button" class="@SegmentClass(run)" style="@LocalSegmentStyle(run, run.StartTime, run.EndTime)" title="@run.Details" @onclick="() => OpenRunDetail(run)">
+                                <span>@run.Label</span>
+                                <small>@run.Status</small>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (activities.Count > 0)
+                    {
+                        <div class="motion-preview-track-block">
+                            <div class="motion-preview-track-label">
+                                <strong>Activities</strong>
+                                <span>@activities.Count major segment(s)</span>
+                            </div>
+                            <div class="motion-preview-track motion-preview-track-dense">
+                                <div class="motion-preview-auto-cursor"></div>
+                                @foreach (var activity in activities.Take(40))
+                                {
+                                    <button type="button" class="@SegmentClass(activity)" style="@DenseLocalSegmentStyle(activity, run.StartTime, run.EndTime)" title="@activity.Details" @onclick="() => OpenRunDetail(run)">
+                                        <span>@activity.Label</span>
+                                    </button>
+                                }
+                                @if (activities.Count > 40)
+                                {
+                                    <span class="motion-preview-overflow">+@(activities.Count - 40)</span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (children.Count > 0)
+                    {
+                        <div class="motion-preview-track-block">
+                            <div class="motion-preview-track-label">
+                                <strong>Child workflows</strong>
+                                <span>@children.Count downstream workflow(s)</span>
+                            </div>
+                            <div class="motion-preview-child-grid">
+                                @foreach (var child in children.Take(8))
+                                {
+                                    <div class="@ChildPreviewCardClass(child)" title="Child workflow motion">
+                                        <div class="motion-preview-child-card-head">
+                                            <div>
+                                                <strong>@child.Label</strong>
+                                                <code>@ShortId(child.RunId)</code>
+                                            </div>
+                                            <StatusBadge Value="@child.Status" />
+                                        </div>
+                                        <span>@FormatDateTime(child.StartTime) → @FormatEndTime(child)</span>
+                                        <div class="motion-preview-mini-track">
+                                            <span class="@MiniBarClass(child)"></span>
+                                        </div>
+                                        <div class="motion-preview-child-actions">
+                                            <button class="button button-ghost button-compact" @onclick="() => OpenChildDetail(child)">Child detail</button>
+                                        </div>
+                                    </div>
+                                }
+                                @if (children.Count > 8)
+                                {
+                                    <div class="motion-preview-child-more">+@(children.Count - 8) more child workflows</div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (markers.Count > 0)
+                    {
+                        <div class="motion-preview-marker-row">
+                            <span>Operator events</span>
+                            @foreach (var marker in markers.Take(12))
+                            {
+                                <span class="@(marker.IsProblem ? "motion-preview-marker is-problem" : "motion-preview-marker")" title="@marker.Details">@marker.Label</span>
+                            }
+                            @if (markers.Count > 12)
+                            {
+                                <span class="motion-preview-marker">+@(markers.Count - 12)</span>
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+
+        @if (OrphanChildren.Count > 0)
+        {
+            <div class="motion-preview-orphan-children">
+                <div>
+                    <strong>Additional child workflow motion</strong>
+                    <span>Child executions outside the visible run windows.</span>
+                </div>
+                <div class="motion-preview-child-grid">
+                    @foreach (var child in OrphanChildren)
+                    {
+                        <div class="@ChildPreviewCardClass(child)">
+                            <div class="motion-preview-child-card-head">
+                                <div>
+                                    <strong>@child.Label</strong>
+                                    <code>@ShortId(child.RunId)</code>
+                                </div>
+                                <StatusBadge Value="@child.Status" />
+                            </div>
+                            <span>@FormatDateTime(child.StartTime) → @FormatEndTime(child)</span>
+                            <div class="motion-preview-mini-track">
+                                <span class="@MiniBarClass(child)"></span>
+                            </div>
+                            <div class="motion-preview-child-actions">
+                                <button class="button button-ghost button-compact" @onclick="() => OpenChildDetail(child)">Child detail</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public WorkflowMotion Motion { get; set; } = new();
+    [Parameter] public string WorkflowId { get; set; } = string.Empty;
+
+    private IReadOnlyList<WorkflowMotionSegment> RunSegments => Motion.Lanes
+        .FirstOrDefault(l => string.Equals(l.Id, "run-chain", StringComparison.OrdinalIgnoreCase))?
+        .Segments
+        .OrderBy(s => s.StartTime)
+        .ToList() ?? [];
+
+    private IReadOnlyList<WorkflowMotionSegment> ActivitySegments => Motion.Lanes
+        .FirstOrDefault(l => string.Equals(l.Id, "activities", StringComparison.OrdinalIgnoreCase))?
+        .Segments
+        .OrderBy(s => s.StartTime)
+        .ToList() ?? [];
+
+    private IReadOnlyList<WorkflowMotionSegment> ChildSegments => Motion.Lanes
+        .FirstOrDefault(l => string.Equals(l.Id, "children", StringComparison.OrdinalIgnoreCase))?
+        .Segments
+        .OrderBy(s => s.StartTime)
+        .ToList() ?? [];
+
+    private IReadOnlyList<WorkflowMotionSegment> OrphanChildren => ChildSegments
+        .Where(child => !RunSegments.Any(run => Overlaps(child.StartTime, child.EndTime, run.StartTime, run.EndTime)))
+        .OrderBy(child => child.StartTime)
+        .ToList();
+
+    private IEnumerable<WorkflowMotionMarker> MarkersForWindow(DateTimeOffset start, DateTimeOffset end) => Motion.Markers
+        .Where(marker => marker.Timestamp >= start && marker.Timestamp <= end && marker.DisplayLevel <= 3);
+
+    private void OpenGroupedDetail()
+    {
+        var id = string.IsNullOrWhiteSpace(WorkflowId) ? Motion.WorkflowId : WorkflowId;
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(id)}");
+        }
+    }
+
+    private void OpenRunDetail(WorkflowMotionSegment run)
+    {
+        if (!string.IsNullOrWhiteSpace(run.WorkflowId) && !string.IsNullOrWhiteSpace(run.RunId))
+        {
+            Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(run.WorkflowId)}/runs/{Uri.EscapeDataString(run.RunId)}");
+        }
+    }
+
+    private void OpenChildDetail(WorkflowMotionSegment child)
+    {
+        if (!string.IsNullOrWhiteSpace(child.WorkflowId))
+        {
+            if (!string.IsNullOrWhiteSpace(child.RunId))
+            {
+                Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(child.WorkflowId)}/runs/{Uri.EscapeDataString(child.RunId)}");
+            }
+            else
+            {
+                Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(child.WorkflowId)}");
+            }
+        }
+    }
+
+    private int RunOrdinal(WorkflowMotionSegment run)
+    {
+        for (var i = 0; i < RunSegments.Count; i++)
+        {
+            if (string.Equals(RunSegments[i].Id, run.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private static bool IsSameRun(string? left, string? right) =>
+        !string.IsNullOrWhiteSpace(left) &&
+        !string.IsNullOrWhiteSpace(right) &&
+        string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+    private static bool Overlaps(DateTimeOffset startA, DateTimeOffset endA, DateTimeOffset startB, DateTimeOffset endB) =>
+        startA <= endB && endA >= startB;
+
+    private static string PreviewCardClass(WorkflowMotionSegment run)
+    {
+        var classes = new List<string> { "motion-preview-card" };
+        if (run.IsCurrent) classes.Add("is-current");
+        if (run.IsProblem) classes.Add("is-problem");
+        if (run.IsWaiting) classes.Add("is-waiting");
+        return string.Join(" ", classes);
+    }
+
+    private static string ChildPreviewCardClass(WorkflowMotionSegment child)
+    {
+        var classes = new List<string> { "motion-preview-child-card" };
+        if (child.IsProblem) classes.Add("is-problem");
+        if (child.IsWaiting) classes.Add("is-waiting");
+        return string.Join(" ", classes);
+    }
+
+    private static string SegmentClass(WorkflowMotionSegment segment)
+    {
+        var classes = new List<string> { "motion-preview-segment", $"motion-preview-segment-{segment.Kind}" };
+        if (segment.IsCurrent) classes.Add("is-current");
+        if (segment.IsProblem) classes.Add("is-problem");
+        if (segment.IsWaiting) classes.Add("is-waiting");
+        if (segment.Status == WorkflowStatus.Completed) classes.Add("is-completed");
+        if (segment.Status == WorkflowStatus.ContinuedAsNew) classes.Add("is-continued");
+        return string.Join(" ", classes);
+    }
+
+    private static string MiniBarClass(WorkflowMotionSegment child)
+    {
+        var classes = new List<string> { "motion-preview-mini-bar" };
+        if (child.IsProblem) classes.Add("is-problem");
+        if (child.IsWaiting) classes.Add("is-waiting");
+        return string.Join(" ", classes);
+    }
+
+    private static string LocalSegmentStyle(WorkflowMotionSegment segment, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    {
+        var left = LocalPercent(Max(segment.StartTime, windowStart), windowStart, windowEnd);
+        var right = LocalPercent(Min(segment.EndTime, windowEnd), windowStart, windowEnd);
+        var width = Math.Max(2.4m, right - left);
+        return $"left:{left.ToString("0.###", CultureInfo.InvariantCulture)}%;width:{width.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+    }
+
+    private static string DenseLocalSegmentStyle(WorkflowMotionSegment segment, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    {
+        var left = LocalPercent(Max(segment.StartTime, windowStart), windowStart, windowEnd);
+        var right = LocalPercent(Min(segment.EndTime, windowEnd), windowStart, windowEnd);
+        var width = Math.Max(1.2m, right - left);
+        return $"left:{left.ToString("0.###", CultureInfo.InvariantCulture)}%;width:{width.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+    }
+
+    private static decimal LocalPercent(DateTimeOffset value, DateTimeOffset start, DateTimeOffset end)
+    {
+        var total = (decimal)Math.Max(1, (end - start).TotalMilliseconds);
+        var elapsed = (decimal)(value - start).TotalMilliseconds;
+        return Math.Clamp(elapsed / total * 100m, 0m, 100m);
+    }
+
+    private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a >= b ? a : b;
+    private static DateTimeOffset Min(DateTimeOffset a, DateTimeOffset b) => a <= b ? a : b;
+
+    private static string FormatDateTime(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+
+    private static string FormatEndTime(WorkflowMotionSegment segment) =>
+        segment.IsWaiting || segment.IsCurrent
+            ? "running"
+            : FormatDateTime(segment.EndTime);
+
+    private static string FormatRange(DateTimeOffset start, DateTimeOffset end) =>
+        $"{start.ToLocalTime():MM/dd HH:mm:ss} → {end.ToLocalTime():MM/dd HH:mm:ss}";
+
+    private static string DurationText(DateTimeOffset start, DateTimeOffset end)
+    {
+        var duration = end - start;
+        if (duration.TotalHours >= 1) return $"{duration.TotalHours:N1}h";
+        if (duration.TotalMinutes >= 1) return $"{duration.TotalMinutes:N1}m";
+        return $"{Math.Max(0, duration.TotalSeconds):N1}s";
+    }
+
+    private static string ShortId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "-";
+        return value.Length <= 8 ? value : value[..8];
+    }
+}

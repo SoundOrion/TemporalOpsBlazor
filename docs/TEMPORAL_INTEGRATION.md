@@ -106,16 +106,11 @@ Temporalでは Continue-As-New により、同じWorkflow IDのまま新しいRu
 
 Motion Viewは「デバッグ用の完全なイベント羅列」ではなく、「現在どこで止まっているか」「どこが業務影響の起点か」「次に何を確認すべきか」を見せるためのビューです。詳細な全イベントは従来のEvent timelineで確認できます。
 
-## Workflow一覧のMotion Preview
+## Workflow一覧の軽量Run Chain表示
 
-Workflow一覧の展開行では、単なるContinue-As-NewのRun一覧ではなく、対象WorkflowごとのMotion Previewを表示します。
+Workflow一覧の展開行では、Continue-As-Newで連なるRunをツリー状の軽量サマリとして表示します。一覧ではMotionを描画せず、Status / Start Time / Close Time / History / Latency と `Run details` 導線だけを見せます。
 
-- 各Continue-As-New Runは独立したWorkflow executionカードとして表示します。
-- ActivityはRunカード内の主要セグメントとして表示します。
-- Child Workflowは親Runの下に別カードとして表示し、クリックで該当Workflowの詳細へ遷移します。
-- 一覧表示時点では詳細Historyを取得せず、行を展開したタイミングで遅延取得します。
-
-この構成により、運用管理者は「同じWorkflow IDに属するRun全体」ではなく、「各Workflow executionで実際に何が起きたか」を確認できます。
+Run単体のMotion確認は `/workflows/{workflowId}/runs/{runId}` に分離しています。これにより、一覧画面は監視・比較・絞り込みに集中し、詳細画面は個別Executionの解析に集中できます。
 
 ## v13: 詳細画面の粒度
 
@@ -126,7 +121,7 @@ Workflow一覧の展開行では、単なるContinue-As-NewのRun一覧ではな
 - Run Detail: `/workflows/{workflowId}/runs/{runId}`
   - 特定 Run の Motion View と Event History を確認します。
 
-一覧の展開プレビューにも Run detail / Child detail の導線を表示しています。
+一覧の展開行には、各Runの `Run details` 導線を表示しています。
 
 ## v14: Continue-As-NewとRun Detailの表示方針
 
@@ -135,3 +130,16 @@ Workflow一覧の展開行では、単なるContinue-As-NewのRun一覧ではな
 
 個別Runの `Details` リンクからRun Detailへ遷移すると、そのRun単体のHistoryを元にMotion Viewを表示します。
 これにより、一覧は監視・絞り込み・状況把握に集中し、詳細画面は個別Executionの解析に集中する構成になります。
+
+
+## v15: UIポリッシュ
+
+画面思想はv14のまま、色・余白・文言・リンク導線を調整しています。
+
+- 一覧は軽量Run Chain表示を維持
+- Workflow行の `Details` はGrouped Detailへ遷移
+- Run行の `Run details` は個別Run Motionへ遷移
+- ボタンの意味が分かるようにラベルとtitleを整理
+- Continue-As-Newツリーの行間、現在Runの強調、hover/focus状態を調整
+- 背景グラデーションとカード影を少し抑え、管理画面として読みやすい配色に調整
+- キーボード操作時のfocus-visibleを追加

@@ -37,14 +37,14 @@ else
             </div>
         </div>
         <div class="detail-actions">
-            <button class="button button-ghost" @onclick="BackToList">Back</button>
+            <button class="button button-ghost" @onclick="BackToList">Back to workflows</button>
             @if (IsRunDetail)
             {
-                <button class="button button-ghost" @onclick="OpenGroupedDetail">Grouped detail</button>
+                <button class="button button-ghost" @onclick="OpenGroupedDetail">Grouped details</button>
             }
             else if (!string.IsNullOrWhiteSpace(workflow.RunId))
             {
-                <button class="button button-ghost" @onclick="() => OpenRunDetail(workflow.WorkflowId, workflow.RunId)">Current run detail</button>
+                <button class="button button-ghost" @onclick="() => OpenRunDetail(workflow.WorkflowId, workflow.RunId)">Current run details</button>
             }
             <button class="button" @onclick="() => _selectedWorkflow = workflow">Operator action</button>
         </div>
@@ -55,8 +55,8 @@ else
         <section class="panel detail-focus-panel">
             <div>
                 <p class="eyebrow">Execution focus</p>
-                <h2>Single workflow execution motion</h2>
-                <p class="muted-text">This page focuses on one Workflow ID / Run ID. Use Grouped detail when you need the full Continue-As-New chain context.</p>
+                <h2>Single-run motion</h2>
+                <p class="muted-text">Focused view for one Workflow ID / Run ID. Use grouped details when you need the full Continue-As-New chain context.</p>
             </div>
             <div class="detail-focus-grid">
                 <div><span>Run ID</span><strong><code>@ShortRunId(workflow.RunId)</code></strong></div>
@@ -73,8 +73,8 @@ else
         <section class="panel grouped-detail-overview">
             <div class="panel-header">
                 <div>
-                    <p class="eyebrow">Grouped execution overview</p>
-                    <h2>Current operational picture</h2>
+                    <p class="eyebrow">Grouped workflow overview</p>
+                    <h2>Operational summary</h2>
                 </div>
                 <span class="chain-badge">@workflow.ContinuationRunCount run(s)</span>
             </div>
@@ -86,7 +86,7 @@ else
                 <div><span>History</span><strong>@workflow.HistoryLength</strong></div>
                 <div><span>Pending</span><strong>@workflow.PendingActivities</strong></div>
             </div>
-            <p class="muted-text">This grouped page keeps the overall operational context compact. Open a Run detail from the chain below to view motion for that execution only.</p>
+            <p class="muted-text">Grouped details stay compact for operational review. Open a run detail below when you need the motion view for one execution.</p>
         </section>
 
         @if (_detail.ContinuationRuns.Count > 0)
@@ -95,7 +95,7 @@ else
                 <div class="panel-header">
                     <div>
                         <p class="eyebrow">Continue-As-New context</p>
-                        <h2>Run detail navigator</h2>
+                        <h2>Run chain</h2>
                     </div>
                     <span class="chain-badge">@_detail.ContinuationRuns.Count runs</span>
                 </div>
@@ -136,7 +136,7 @@ else
                                 </div>
                                 <div class="chain-run-field compact-field chain-run-action-field">
                                     <span class="chain-field-label">Detail</span>
-                                    <button class="button button-ghost button-compact" @onclick="() => OpenRunDetail(run.WorkflowId, run.RunId)">Details</button>
+                                    <button class="button button-ghost button-compact" title="Open run detail and motion" @onclick="() => OpenRunDetail(run.WorkflowId, run.RunId)">Run details</button>
                                 </div>
                             </div>
                         </div>

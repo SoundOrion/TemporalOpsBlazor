@@ -2035,3 +2035,293 @@ textarea { padding: 10px 12px; border-radius: 13px; }
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+
+/* --------------------------------------------------------------------------
+   v15 polish: calmer operations UI, clearer link affordance, compact run chain
+   -------------------------------------------------------------------------- */
+:root {
+    --ok: var(--success);
+    --focus-ring: 0 0 0 3px rgba(117, 228, 255, .24);
+    --row-hover: rgba(117, 228, 255, .045);
+    --surface-table: rgba(12, 18, 32, .72);
+}
+
+body {
+    background:
+        radial-gradient(circle at 12% 6%, rgba(117, 228, 255, .11), transparent 32rem),
+        radial-gradient(circle at 94% 2%, rgba(167, 139, 250, .12), transparent 30rem),
+        linear-gradient(145deg, #070a12 0%, #0b1220 52%, #070a12 100%);
+}
+
+.topbar {
+    background: rgba(7, 10, 18, .82);
+}
+
+.page-wrap {
+    max-width: 1680px;
+    width: 100%;
+}
+
+.panel,
+.loading-card,
+.empty-state,
+.table-shell {
+    box-shadow: 0 18px 54px rgba(0, 0, 0, .28);
+}
+
+.button,
+.button-compact,
+.button-ghost,
+.button-danger,
+.chain-toggle,
+.chain-badge,
+.nav-link,
+.pill,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.button:focus-visible,
+.button-compact:focus-visible,
+.button-ghost:focus-visible,
+.button-danger:focus-visible,
+.chain-toggle:focus-visible,
+.chain-badge:focus-visible,
+.nav-link:focus-visible,
+.pill:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring), inset 0 0 0 1px rgba(117, 228, 255, .24);
+}
+
+.button-ghost:hover,
+.chain-toggle:hover,
+.chain-badge:hover {
+    border-color: rgba(117, 228, 255, .32);
+    background: rgba(117, 228, 255, .075);
+    color: var(--text);
+}
+
+.button-ghost {
+    border: 1px solid rgba(255,255,255,.10);
+}
+
+.data-table th {
+    background: rgba(255,255,255,.045);
+}
+
+.data-table tbody tr:not(.chain-detail-row):hover td {
+    background: var(--row-hover);
+}
+
+.workflow-group-table .has-chain {
+    background: rgba(117, 228, 255, .018);
+}
+
+.workflow-group-table tr.is-expanded > td {
+    background: rgba(117, 228, 255, .035);
+}
+
+.workflow-cell-main strong {
+    letter-spacing: -.01em;
+}
+
+.chain-note {
+    margin-top: 1px;
+}
+
+.chain-badge {
+    background: rgba(117,228,255,.085);
+    border-color: rgba(117,228,255,.24);
+    color: #9deeff;
+}
+
+.chain-detail-row td {
+    background: rgba(5, 10, 23, .55);
+}
+
+.chain-detail {
+    padding: 12px 14px 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.18));
+    border-color: rgba(255,255,255,.09);
+}
+
+.chain-detail-header {
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.chain-detail-header strong {
+    letter-spacing: -.01em;
+}
+
+.chain-detail-header span {
+    max-width: 760px;
+    text-align: right;
+    line-height: 1.4;
+}
+
+.chain-timeline {
+    gap: 8px;
+}
+
+.chain-run {
+    grid-template-columns: 16px minmax(0, 1fr);
+    gap: 9px;
+}
+
+.chain-run:not(:last-child)::before {
+    left: 7px;
+    top: 16px;
+    bottom: -8px;
+    background: linear-gradient(180deg, rgba(117,228,255,.34), rgba(117,228,255,.08));
+}
+
+.chain-dot {
+    width: 16px;
+    height: 16px;
+    box-shadow: 0 0 12px rgba(117,228,255,.10);
+}
+
+.chain-run-body,
+.detail-run-node {
+    border-radius: 13px;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+
+.chain-run-body:hover,
+.detail-run-node:hover {
+    border-color: rgba(117, 228, 255, .22);
+    background: rgba(255,255,255,.055);
+}
+
+.chain-run.is-current .chain-run-body,
+.detail-run-node.is-current {
+    border-color: rgba(84,216,146,.32);
+    background: linear-gradient(135deg, rgba(84,216,146,.075), rgba(117,228,255,.055));
+}
+
+.chain-run.is-current .chain-dot {
+    background: var(--success);
+    border-color: rgba(84,216,146,.56);
+    box-shadow: 0 0 0 4px rgba(84,216,146,.10), 0 0 18px rgba(84,216,146,.22);
+}
+
+.current-chip {
+    color: #a9f5c9;
+    background: rgba(84,216,146,.12);
+    border-color: rgba(84,216,146,.26);
+}
+
+.chain-run-grid,
+.detail-run-grid,
+.detail-run-grid-with-action {
+    grid-template-columns:
+        minmax(112px, .85fr)
+        minmax(120px, .85fr)
+        minmax(156px, 1fr)
+        minmax(156px, 1fr)
+        minmax(62px, .35fr)
+        minmax(72px, .42fr)
+        minmax(108px, .55fr);
+    gap: 9px 11px;
+}
+
+.chain-run-field {
+    gap: 5px;
+}
+
+.chain-field-label {
+    color: #8fa2c4;
+    font-size: .68rem;
+    letter-spacing: .105em;
+}
+
+.chain-run-field strong,
+.chain-run-field code {
+    font-size: .92rem;
+}
+
+.chain-run-action-field .button {
+    width: max-content;
+    min-width: 94px;
+    justify-self: start;
+}
+
+.detail-focus-panel,
+.grouped-detail-overview {
+    border-color: rgba(117, 228, 255, .12);
+    background: linear-gradient(180deg, rgba(117,228,255,.045), rgba(255,255,255,.035));
+}
+
+.detail-focus-grid > div {
+    background: rgba(0,0,0,.14);
+    border: 1px solid rgba(255,255,255,.075);
+}
+
+.detail-actions {
+    align-items: center;
+}
+
+.motion-panel {
+    border-color: rgba(117, 228, 255, .10);
+}
+
+.motion-header {
+    gap: .85rem;
+}
+
+.motion-state-card,
+.motion-kpi,
+.motion-ops-summary > div,
+.motion-toolbar,
+.motion-card-section,
+.motion-findings,
+.motion-inspector {
+    border-color: rgba(255,255,255,.085);
+}
+
+.workflow-motion-card {
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(5, 10, 23, .46));
+}
+
+.workflow-card-track {
+    background: rgba(4, 9, 21, .42);
+}
+
+.motion-segment,
+.motion-marker {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 20px rgba(0,0,0,.16);
+}
+
+@media (max-width: 1280px) {
+    .chain-run-grid,
+    .detail-run-grid,
+    .detail-run-grid-with-action {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .chain-detail-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .chain-detail-header span {
+        text-align: left;
+    }
+}
+
+@media (max-width: 760px) {
+    .chain-run-grid,
+    .detail-run-grid,
+    .detail-run-grid-with-action {
+        grid-template-columns: 1fr;
+    }
+
+    .chain-run-action-field .button {
+        width: 100%;
+    }
+}

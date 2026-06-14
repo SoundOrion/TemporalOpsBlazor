@@ -24,7 +24,7 @@
                     <div class="workflow-cell workflow-cell-with-toggle">
                         @if (workflow.HasContinuationChain)
                         {
-                            <button class="chain-toggle" title="Show Continue-As-New run chain" @onclick="() => Toggle(workflow)">
+                            <button class="chain-toggle" title="Show run chain" aria-label="Show Continue-As-New run chain" @onclick="() => Toggle(workflow)">
                                 <span class="@ToggleIconClass(isExpanded)">▾</span>
                             </button>
                         }
@@ -47,8 +47,8 @@
                 <td>
                     @if (workflow.HasContinuationChain)
                     {
-                        <button class="chain-badge" @onclick="() => Toggle(workflow)">
-                            ContinueAsNew × @workflow.ContinuationRunCount
+                        <button class="chain-badge" title="Show Continue-As-New run chain" @onclick="() => Toggle(workflow)">
+                            Continue-As-New × @workflow.ContinuationRunCount
                         </button>
                     }
                     else
@@ -61,8 +61,8 @@
                 <td>@workflow.LatencySeconds.ToString("N1")s</td>
                 <td>@workflow.Owner</td>
                 <td class="row-actions">
-                    <button class="button button-ghost" @onclick="() => OpenGroupedDetail(workflow)">Details</button>
-                    <button class="button button-compact" @onclick="() => OnAction.InvokeAsync(workflow)">Action</button>
+                    <button class="button button-ghost" title="Open grouped workflow detail" @onclick="() => OpenGroupedDetail(workflow)">Grouped details</button>
+                    <button class="button button-compact" title="Open guarded operator actions" @onclick="() => OnAction.InvokeAsync(workflow)">Action</button>
                 </td>
             </tr>
             @if (workflow.HasContinuationChain && isExpanded)
@@ -72,7 +72,7 @@
                         <div class="chain-detail">
                             <div class="chain-detail-header">
                                 <strong>Continue-As-New run chain</strong>
-                                <span>Runs are ordered from oldest to newest. Actions target the current run. Open a run detail to view motion for that execution only.</span>
+                                <span>Oldest to newest. Actions target the current run. Open a run detail to inspect that execution only.</span>
                             </div>
                             <div class="chain-timeline">
                                 @foreach (var run in workflow.ContinuationRuns.OrderBy(r => r.StartedAt))
@@ -113,7 +113,7 @@
                                                 </div>
                                                 <div class="chain-run-field compact-field chain-run-action-field">
                                                     <span class="chain-field-label">Detail</span>
-                                                    <button class="button button-ghost button-compact" @onclick="() => OpenRunDetail(run.WorkflowId, run.RunId)">Details</button>
+                                                    <button class="button button-ghost button-compact" title="Open run detail and motion" @onclick="() => OpenRunDetail(run.WorkflowId, run.RunId)">Run details</button>
                                                 </div>
                                             </div>
                                         </div>
