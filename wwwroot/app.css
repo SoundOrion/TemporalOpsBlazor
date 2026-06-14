@@ -2466,3 +2466,42 @@ textarea:focus-visible {
     font-size: .82rem;
     font-weight: 900;
 }
+
+/* v18: Uniform execution tree for every workflow row */
+.workflow-group-table .has-tree {
+    background: rgba(117, 228, 255, .012);
+}
+
+.workflow-group-table .has-tree .chain-toggle {
+    opacity: .92;
+}
+
+.chain-detail-header > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.chain-detail-header > div small {
+    color: var(--muted);
+    font-size: .78rem;
+    line-height: 1.25;
+}
+
+.workflow-group-table .has-tree:not(.has-chain) .chain-badge {
+    background: rgba(255,255,255,.055);
+    border-color: rgba(255,255,255,.12);
+    color: rgba(230,237,255,.92);
+}
+
+.workflow-group-table .has-tree:not(.has-chain) .chain-dot {
+    border-color: rgba(255,255,255,.18);
+    background: rgba(255,255,255,.09);
+    box-shadow: 0 0 12px rgba(255,255,255,.06);
+}
+
+.workflow-group-table .has-tree:not(.has-chain) .chain-run.is-current .chain-dot {
+    background: var(--success);
+    border-color: rgba(84,216,146,.56);
+    box-shadow: 0 0 0 4px rgba(84,216,146,.10), 0 0 18px rgba(84,216,146,.20);
+}

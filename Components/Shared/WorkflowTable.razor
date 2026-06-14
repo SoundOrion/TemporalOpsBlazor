@@ -19,42 +19,26 @@
         @foreach (var workflow in Items)
         {
             var isExpanded = IsExpanded(workflow);
+            var runs = OrderedRuns(workflow).ToList();
             <tr class="@RowClass(workflow, isExpanded)">
                 <td>
                     <div class="workflow-cell workflow-cell-with-toggle">
-                        @if (workflow.HasContinuationChain)
-                        {
-                            <button class="chain-toggle" title="@ToggleTitle(isExpanded)" aria-label="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
-                                <span class="@ToggleIconClass(isExpanded)">▾</span>
-                            </button>
-                        }
+                        <button class="chain-toggle" title="@ToggleTitle(isExpanded)" aria-label="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
+                            <span class="@ToggleIconClass(isExpanded)">▾</span>
+                        </button>
                         <div class="workflow-cell-main">
                             <strong>@workflow.WorkflowId</strong>
                             <span>@workflow.WorkflowType</span>
-                            @if (workflow.HasContinuationChain)
-                            {
-                                <small class="chain-note">current run: <code>@ShortRunId(workflow.RunId)</code></small>
-                            }
-                            else
-                            {
-                                <small class="chain-note">run: <code>@ShortRunId(workflow.RunId)</code></small>
-                            }
+                            <small class="chain-note">current run: <code>@ShortRunId(workflow.RunId)</code></small>
                         </div>
                     </div>
                 </td>
                 <td><StatusBadge Value="@workflow.Status" /></td>
                 <td><StatusBadge Value="@workflow.Risk" /></td>
                 <td>
-                    @if (workflow.HasContinuationChain)
-                    {
-                        <button class="chain-badge" title="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
-                            Continue-As-New × @workflow.ContinuationRunCount
-                        </button>
-                    }
-                    else
-                    {
-                        <span class="muted-text">1</span>
-                    }
+                    <button class="chain-badge" title="@ToggleTitle(isExpanded)" @onclick="() => Toggle(workflow)">
+                        Runs × @runs.Count
+                    </button>
                 </td>
                 <td><code>@workflow.TaskQueue</code></td>
                 <td>@workflow.PendingActivities</td>
@@ -65,17 +49,20 @@
                     <button class="button button-compact" title="Open guarded operator actions" @onclick="() => OnAction.InvokeAsync(workflow)">Action</button>
                 </td>
             </tr>
-            @if (workflow.HasContinuationChain && isExpanded)
+            @if (isExpanded)
             {
                 <tr class="chain-detail-row">
                     <td colspan="9">
                         <div class="chain-detail">
                             <div class="chain-detail-header">
-                                <strong>Continue-As-New run chain</strong>
-                                <span>Current run first, then newest to oldest. Opened chains stay open after refresh.</span>
+                                <div>
+                                    <strong>Execution tree</strong>
+                                    <small>@TreeDescriptor(workflow, runs.Count)</small>
+                                </div>
+                                <span>Current run first. Opened trees stay open after refresh. Run details inspect that execution only.</span>
                             </div>
                             <div class="chain-timeline">
-                                @foreach (var run in OrderedRuns(workflow))
+                                @foreach (var run in runs)
                                 {
                                     <div class="@ChainRunClass(run)">
                                         <div class="chain-dot"></div>
@@ -146,7 +133,7 @@
     }
 
     private bool IsExpanded(WorkflowExecutionSummary workflow) =>
-        workflow.HasContinuationChain && _expandedWorkflowIds.Contains(workflow.WorkflowId);
+        _expandedWorkflowIds.Contains(workflow.WorkflowId);
 
     private void Toggle(WorkflowExecutionSummary workflow)
     {
@@ -156,17 +143,36 @@
         }
     }
 
-    private static IEnumerable<WorkflowRunSummary> OrderedRuns(WorkflowExecutionSummary workflow) =>
-        workflow.ContinuationRuns
+    private static IEnumerable<WorkflowRunSummary> OrderedRuns(WorkflowExecutionSummary workflow)
+    {
+        IReadOnlyList<WorkflowRunSummary> runs = workflow.ContinuationRuns.Count > 0
+            ? workflow.ContinuationRuns
+            : new List<WorkflowRunSummary> { ToRunSummary(workflow) };
+
+        return runs
             .OrderByDescending(r => r.IsCurrent)
             .ThenByDescending(r => r.StartedAt);
+    }
+
+    private static WorkflowRunSummary ToRunSummary(WorkflowExecutionSummary workflow) => new()
+    {
+        WorkflowId = workflow.WorkflowId,
+        RunId = workflow.RunId,
+        Status = workflow.Status,
+        TaskQueue = workflow.TaskQueue,
+        StartedAt = workflow.StartedAt,
+        ClosedAt = workflow.ClosedAt,
+        HistoryLength = workflow.HistoryLength,
+        LatencySeconds = workflow.LatencySeconds,
+        IsCurrent = true
+    };
 
     private static string ToggleTitle(bool isExpanded) =>
-        isExpanded ? "Collapse run chain" : "Show run chain";
+        isExpanded ? "Collapse execution tree" : "Show execution tree";
 
     private static string RowClass(WorkflowExecutionSummary workflow, bool isExpanded)
     {
-        var classes = new List<string>();
+        var classes = new List<string> { "has-tree" };
         if (workflow.HasContinuationChain) classes.Add("has-chain");
         if (isExpanded) classes.Add("is-expanded");
         return string.Join(" ", classes);
@@ -177,6 +183,18 @@
 
     private static string ChainRunClass(WorkflowRunSummary run) =>
         run.IsCurrent ? "chain-run is-current" : "chain-run";
+
+    private static string TreeDescriptor(WorkflowExecutionSummary workflow, int runCount)
+    {
+        if (runCount <= 1)
+        {
+            return "Single execution";
+        }
+
+        return workflow.HasContinuationChain
+            ? $"Continue-As-New chain, {runCount} runs"
+            : $"{runCount} related runs";
+    }
 
     private static string FormatDateTime(DateTimeOffset value) =>
         value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");

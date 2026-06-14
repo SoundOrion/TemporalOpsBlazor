@@ -8,7 +8,7 @@
     <div>
         <p class="eyebrow">Live Workflow Monitor</p>
         <h1>Monitor workflow executions by latest activity</h1>
-        <p>Open only the chains you need. Expanded chains stay open across refreshes, and the latest current runs stay at the top for real-time monitoring.</p>
+        <p>Open only the execution trees you need. Expanded trees stay open across refreshes, and the latest current runs stay at the top for real-time monitoring.</p>
     </div>
     <button class="button" @onclick="SearchAsync" disabled="@_isSearching">@(_isSearching ? "Refreshing..." : "Refresh now")</button>
 </section>
@@ -52,7 +52,7 @@
         <small>10s interval</small>
     </label>
     <div class="monitor-toggle monitor-hint" role="status">
-        <span>Opened chains persist</span>
+        <span>Opened trees persist</span>
         <small>refresh-safe tree state</small>
     </div>
     <div class="monitor-status">
