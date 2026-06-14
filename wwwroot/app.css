@@ -649,3 +649,1389 @@ textarea { padding: 10px 12px; border-radius: 13px; }
     .review-kpi-grid { grid-template-columns: 1fr; }
     .health-ring { width: 92px; height: 92px; }
 }
+
+/* Workflow Motion View --------------------------------------------------- */
+.motion-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.motion-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.motion-state-card {
+    display: grid;
+    gap: .35rem;
+    padding: .95rem 1rem;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(31,215,255,.12), rgba(118,105,255,.10));
+}
+
+.motion-state-card span,
+.motion-kpi span,
+.motion-ops-summary span {
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.motion-state-card strong {
+    color: var(--text);
+    line-height: 1.35;
+}
+
+.motion-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(260px, 1.4fr);
+    gap: .75rem;
+}
+
+.motion-kpi {
+    min-width: 0;
+    padding: .85rem .95rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 16px;
+    background: rgba(255,255,255,.045);
+}
+
+.motion-kpi strong {
+    display: block;
+    margin-top: .25rem;
+    font-size: 1.35rem;
+}
+
+.motion-kpi-wide strong {
+    font-size: .98rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.motion-kpi.is-problem {
+    border-color: rgba(255,107,107,.35);
+    background: rgba(255,107,107,.08);
+}
+
+.motion-ops-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+}
+
+.motion-ops-summary > div {
+    padding: .9rem 1rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 18px;
+    background: rgba(0,0,0,.16);
+}
+
+.motion-ops-summary strong {
+    display: block;
+    margin-top: .35rem;
+    color: rgba(255,255,255,.92);
+    line-height: 1.4;
+}
+
+.motion-toolbar,
+.motion-playback-buttons {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    flex-wrap: wrap;
+}
+
+.motion-toolbar {
+    justify-content: space-between;
+    padding: .7rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    background: rgba(0,0,0,.14);
+}
+
+.motion-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--muted);
+    font-size: .84rem;
+    font-weight: 750;
+}
+
+.motion-speed .select {
+    min-height: 34px;
+    width: auto;
+}
+
+.motion-scrubber-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: .75rem;
+    align-items: center;
+    color: var(--muted);
+    font-size: .82rem;
+}
+
+.motion-scrubber-row input[type="range"] {
+    width: 100%;
+    accent-color: #70d6ff;
+}
+
+.motion-stage {
+    position: relative;
+    display: grid;
+    gap: .75rem;
+    padding: 1rem .75rem .85rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.18));
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.motion-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 .75rem;
+    pointer-events: none;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 1px, transparent 1px 8.333%);
+    opacity: .32;
+}
+
+.motion-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--progress);
+    z-index: 8;
+    width: 2px;
+    min-height: 100%;
+    background: linear-gradient(180deg, rgba(31,215,255,.1), rgba(31,215,255,.85), rgba(118,105,255,.18));
+    box-shadow: 0 0 14px rgba(31,215,255,.35);
+    pointer-events: none;
+}
+
+.motion-cursor span {
+    position: sticky;
+    top: .2rem;
+    display: inline-flex;
+    transform: translateX(8px);
+    padding: .22rem .45rem;
+    border: 1px solid rgba(31,215,255,.24);
+    border-radius: 999px;
+    background: rgba(4, 12, 28, .92);
+    color: rgba(255,255,255,.92);
+    font-size: .72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.motion-lane {
+    display: grid;
+    grid-template-columns: 220px minmax(760px, 1fr);
+    gap: .8rem;
+    align-items: center;
+    min-width: 980px;
+    position: relative;
+    z-index: 1;
+}
+
+.motion-lane-title {
+    display: grid;
+    gap: .22rem;
+    min-width: 0;
+}
+
+.motion-lane-title strong {
+    color: rgba(255,255,255,.95);
+    font-size: .92rem;
+}
+
+.motion-lane-title span {
+    color: var(--muted);
+    font-size: .76rem;
+    line-height: 1.35;
+}
+
+.motion-track {
+    position: relative;
+    height: 52px;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 15px;
+    background: rgba(0,0,0,.16);
+    overflow: hidden;
+}
+
+.motion-segment {
+    position: absolute;
+    top: 9px;
+    bottom: 9px;
+    min-width: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: 0 .7rem;
+    border: 1px solid rgba(31,215,255,.22);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(31,215,255,.24), rgba(118,105,255,.18));
+    color: rgba(255,255,255,.95);
+    font-weight: 850;
+    line-height: 1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 8px 24px rgba(0,0,0,.18);
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    overflow: hidden;
+}
+
+.motion-segment:hover,
+.motion-marker:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31,215,255,.5);
+    box-shadow: 0 10px 28px rgba(0,0,0,.24), 0 0 0 1px rgba(31,215,255,.12);
+}
+
+.motion-segment small {
+    color: rgba(255,255,255,.72);
+    font-size: .65rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.motion-segment-label {
+    min-width: 0;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.motion-segment-workflow {
+    background: linear-gradient(90deg, rgba(118,105,255,.28), rgba(31,215,255,.18));
+}
+
+.motion-segment-run.is-continued,
+.motion-marker-continue {
+    border-color: rgba(126,231,135,.28);
+    background: rgba(46,204,113,.16);
+}
+
+.motion-segment-child {
+    border-color: rgba(255,211,105,.25);
+    background: linear-gradient(90deg, rgba(255,211,105,.18), rgba(118,105,255,.12));
+}
+
+.motion-segment-activity {
+    border-color: rgba(116,185,255,.26);
+    background: linear-gradient(90deg, rgba(116,185,255,.20), rgba(31,215,255,.10));
+}
+
+.motion-segment.is-current,
+.motion-segment.is-waiting {
+    animation: motionPulse 1.8s ease-in-out infinite;
+}
+
+.motion-segment.is-problem,
+.motion-marker.is-problem {
+    border-color: rgba(255,107,107,.55);
+    background: linear-gradient(90deg, rgba(255,107,107,.28), rgba(255,174,66,.14));
+}
+
+.motion-marker {
+    position: absolute;
+    top: 50%;
+    z-index: 5;
+    transform: translate(-50%, -50%);
+    max-width: 170px;
+    min-width: 18px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 .5rem;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 999px;
+    background: rgba(7,14,30,.92);
+    color: rgba(255,255,255,.9);
+    font-size: .68rem;
+    font-weight: 850;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.motion-marker-signal {
+    border-color: rgba(31,215,255,.3);
+}
+
+.motion-marker-timer {
+    border-color: rgba(255,211,105,.3);
+}
+
+.motion-bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+    gap: 1rem;
+}
+
+.motion-findings,
+.motion-inspector {
+    display: grid;
+    gap: .75rem;
+    align-content: start;
+    padding: .9rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    background: rgba(0,0,0,.14);
+}
+
+.motion-section-title {
+    color: rgba(255,255,255,.92);
+    font-weight: 850;
+}
+
+.motion-finding {
+    display: grid;
+    gap: .4rem;
+    padding: .8rem .85rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    background: rgba(255,255,255,.04);
+}
+
+.motion-finding > div {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.motion-finding p,
+.motion-finding small,
+.motion-inspector p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.45;
+}
+
+.motion-finding-critical,
+.motion-finding-high {
+    border-color: rgba(255,107,107,.28);
+    background: rgba(255,107,107,.07);
+}
+
+.motion-finding-medium {
+    border-color: rgba(255,211,105,.20);
+    background: rgba(255,211,105,.06);
+}
+
+.motion-inspector-grid {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: .45rem .75rem;
+    margin: 0;
+}
+
+.motion-inspector-grid dt {
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.motion-inspector-grid dd {
+    margin: 0;
+    min-width: 0;
+    color: rgba(255,255,255,.92);
+    word-break: break-word;
+}
+
+@keyframes motionPulse {
+    0%, 100% {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 8px 24px rgba(0,0,0,.18), 0 0 0 0 rgba(31,215,255,0);
+    }
+    50% {
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 8px 24px rgba(0,0,0,.18), 0 0 0 5px rgba(31,215,255,.10);
+    }
+}
+
+@media (max-width: 1200px) {
+    .motion-header,
+    .motion-ops-summary,
+    .motion-bottom-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .motion-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .motion-kpi-wide {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 720px) {
+    .motion-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .motion-kpi-wide {
+        grid-column: auto;
+    }
+
+    .motion-toolbar {
+        align-items: stretch;
+    }
+
+    .motion-speed,
+    .motion-playback-buttons {
+        width: 100%;
+    }
+}
+
+.select {
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px;
+    background: rgba(4, 12, 28, .92);
+    color: var(--text);
+    padding: .35rem .55rem;
+}
+
+/* Workflow-by-workflow Motion Cards -------------------------------------- */
+.motion-card-section {
+    display: grid;
+    gap: .85rem;
+    padding: .9rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.16));
+}
+
+.motion-card-section-header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.motion-card-section-header h3 {
+    margin: .1rem 0 0;
+    color: rgba(255,255,255,.96);
+    font-size: 1.02rem;
+}
+
+.motion-card-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: .3rem .7rem;
+    border: 1px solid rgba(31,215,255,.18);
+    border-radius: 999px;
+    background: rgba(31,215,255,.08);
+    color: #8be7ff;
+    font-size: .78rem;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.workflow-motion-card-list {
+    display: grid;
+    gap: .85rem;
+}
+
+.workflow-motion-card {
+    display: grid;
+    gap: .85rem;
+    padding: .9rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)), rgba(8,16,34,.7);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 12px 34px rgba(0,0,0,.18);
+}
+
+.workflow-motion-card.is-current {
+    border-color: rgba(31,215,255,.24);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 12px 34px rgba(0,0,0,.18), 0 0 0 1px rgba(31,215,255,.09);
+}
+
+.workflow-motion-card.is-problem {
+    border-color: rgba(255,107,107,.32);
+    background: linear-gradient(180deg, rgba(255,107,107,.08), rgba(255,255,255,.018)), rgba(8,16,34,.72);
+}
+
+.workflow-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(520px, 1.15fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.workflow-card-title {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    min-width: 0;
+}
+
+.workflow-card-index {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(31,215,255,.22);
+    border-radius: 12px;
+    background: rgba(31,215,255,.10);
+    color: #8be7ff;
+    font-size: .82rem;
+    font-weight: 900;
+}
+
+.workflow-card-titleline {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex-wrap: wrap;
+    color: rgba(255,255,255,.96);
+}
+
+.workflow-card-titleline code {
+    padding: .18rem .45rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 9px;
+    background: rgba(31,215,255,.08);
+    color: #a7efff;
+}
+
+.workflow-card-title p,
+.child-card-head p {
+    margin: .25rem 0 0;
+    color: var(--muted);
+    font-size: .82rem;
+    line-height: 1.38;
+}
+
+.workflow-card-meta,
+.child-card-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .55rem;
+}
+
+.workflow-card-meta > div,
+.child-card-meta > div {
+    min-width: 0;
+    padding: .55rem .65rem;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+    background: rgba(0,0,0,.13);
+}
+
+.workflow-card-meta span,
+.child-card-meta span {
+    display: block;
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 850;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.workflow-card-meta strong,
+.child-card-meta strong {
+    display: block;
+    margin-top: .18rem;
+    color: rgba(255,255,255,.92);
+    font-size: .78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workflow-card-motion {
+    display: grid;
+    gap: .55rem;
+}
+
+.workflow-card-row {
+    display: grid;
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: .7rem;
+    align-items: center;
+}
+
+.workflow-card-row-label {
+    display: grid;
+    gap: .12rem;
+    min-width: 0;
+}
+
+.workflow-card-row-label strong {
+    color: rgba(255,255,255,.9);
+    font-size: .84rem;
+}
+
+.workflow-card-row-label span {
+    color: var(--muted);
+    font-size: .72rem;
+    line-height: 1.25;
+}
+
+.workflow-card-track {
+    position: relative;
+    min-height: 42px;
+    border: 1px solid rgba(255,255,255,.075);
+    border-radius: 14px;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 10%), rgba(0,0,0,.16);
+    overflow: hidden;
+}
+
+.workflow-card-track-stack {
+    min-height: 102px;
+}
+
+.workflow-card-track-dense {
+    min-height: 42px;
+}
+
+.workflow-card-track-dense .motion-segment {
+    min-width: 10px;
+    padding: 0 .25rem;
+}
+
+.workflow-card-track-dense .motion-segment-label {
+    max-width: 74px;
+    font-size: .68rem;
+}
+
+.workflow-card-track-dense .motion-segment small {
+    display: none;
+}
+
+.workflow-card-track-markers {
+    min-height: 40px;
+}
+
+.workflow-card-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 8;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(31,215,255,.15), rgba(31,215,255,.9), rgba(118,105,255,.18));
+    box-shadow: 0 0 12px rgba(31,215,255,.35);
+    pointer-events: none;
+}
+
+.workflow-card-cursor span {
+    position: absolute;
+    top: 3px;
+    left: 7px;
+    padding: .18rem .38rem;
+    border: 1px solid rgba(31,215,255,.22);
+    border-radius: 999px;
+    background: rgba(4, 12, 28, .94);
+    color: rgba(255,255,255,.9);
+    font-size: .66rem;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.motion-overflow-note {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    z-index: 7;
+    padding: .15rem .45rem;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 999px;
+    background: rgba(4,12,28,.84);
+    color: var(--muted);
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.child-motion-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: .85rem;
+}
+
+.child-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .85rem;
+}
+
+.child-card-head strong {
+    color: rgba(255,255,255,.94);
+    word-break: break-word;
+}
+
+.child-card-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.child-card-track {
+    min-height: 44px;
+}
+
+@media (max-width: 1240px) {
+    .workflow-card-head {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow-card-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 820px) {
+    .motion-card-section-header,
+    .workflow-card-row {
+        grid-template-columns: 1fr;
+    }
+
+    .motion-card-section-header {
+        display: grid;
+        align-items: start;
+    }
+
+    .workflow-card-meta,
+    .child-card-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Workflow list: per-workflow motion preview */
+.workflow-group-table tr.is-expanded > td {
+    border-bottom-color: rgba(31, 215, 255, .18);
+}
+
+.workflow-motion-detail-row > td {
+    padding: 0 !important;
+    background: linear-gradient(180deg, rgba(31, 215, 255, .035), rgba(118, 105, 255, .025));
+}
+
+.motion-preview-loading,
+.motion-preview-error {
+    display: flex;
+    align-items: center;
+    gap: .95rem;
+    margin: .8rem 1rem 1rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 18px;
+    background: rgba(5, 11, 24, .62);
+    color: rgba(255,255,255,.92);
+}
+
+.motion-preview-loading span,
+.motion-preview-error span {
+    display: block;
+    margin-top: .2rem;
+    color: rgba(255,255,255,.62);
+    font-size: .88rem;
+}
+
+.motion-preview-error {
+    border-color: rgba(255, 107, 107, .28);
+    background: rgba(255, 107, 107, .08);
+}
+
+.loading-pulse {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #74dcff;
+    box-shadow: 0 0 0 0 rgba(116, 220, 255, .46);
+    animation: motionPreviewPulse 1.25s ease-in-out infinite;
+}
+
+.workflow-motion-preview {
+    margin: .8rem 1rem 1.05rem;
+    padding: 1rem;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 22px;
+    background: radial-gradient(700px 240px at 5% 0%, rgba(31, 215, 255, .11), transparent 60%),
+                linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)),
+                rgba(6, 12, 27, .78);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 40px rgba(0,0,0,.20);
+}
+
+.workflow-motion-preview.is-empty {
+    display: grid;
+    gap: .25rem;
+    color: rgba(255,255,255,.78);
+}
+
+.workflow-motion-preview-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: .95rem;
+}
+
+.workflow-motion-preview-head h3 {
+    margin: 0;
+    font-size: 1.08rem;
+    letter-spacing: -.01em;
+}
+
+.workflow-motion-preview-head p:not(.eyebrow) {
+    margin: .25rem 0 0;
+    color: rgba(255,255,255,.62);
+    line-height: 1.42;
+}
+
+.workflow-motion-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex: 0 0 auto;
+}
+
+.motion-preview-state {
+    min-width: 160px;
+    padding: .7rem .85rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 16px;
+    background: rgba(255,255,255,.045);
+}
+
+.motion-preview-state span,
+.motion-preview-kpis span,
+.motion-preview-meta-row span,
+.motion-preview-track-label span {
+    display: block;
+    color: rgba(255,255,255,.55);
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.motion-preview-state strong {
+    display: block;
+    margin-top: .25rem;
+    color: rgba(255,255,255,.94);
+    font-size: .9rem;
+}
+
+.motion-preview-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(96px, .6fr)) minmax(260px, 1.4fr);
+    gap: .65rem;
+    margin-bottom: .95rem;
+}
+
+.motion-preview-kpis > div {
+    padding: .7rem .8rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(0,0,0,.10));
+}
+
+.motion-preview-kpis strong {
+    display: block;
+    margin-top: .25rem;
+    color: rgba(255,255,255,.96);
+    font-size: .96rem;
+}
+
+.motion-preview-kpis .has-problem {
+    border-color: rgba(255, 190, 90, .32);
+    background: rgba(255, 190, 90, .08);
+}
+
+.motion-preview-execution-list {
+    display: grid;
+    gap: .85rem;
+}
+
+.motion-preview-card {
+    position: relative;
+    overflow: hidden;
+    padding: .9rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02)), rgba(9, 16, 36, .70);
+}
+
+.motion-preview-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, rgba(31,215,255,.9), rgba(118,105,255,.85));
+    opacity: .75;
+}
+
+.motion-preview-card.is-current {
+    border-color: rgba(116, 220, 255, .22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 1px rgba(31,215,255,.06), 0 10px 28px rgba(31,215,255,.08);
+}
+
+.motion-preview-card.is-problem {
+    border-color: rgba(255, 107, 107, .30);
+}
+
+.motion-preview-card-head {
+    display: grid;
+    grid-template-columns: minmax(250px, 1.2fr) minmax(420px, 2fr);
+    gap: .85rem;
+    align-items: center;
+    margin-bottom: .85rem;
+}
+
+.motion-preview-titleline {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    min-width: 0;
+}
+
+.motion-preview-titleline > div {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.motion-preview-run-index {
+    width: 28px;
+    height: 28px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(31,215,255,.25);
+    border-radius: 999px;
+    background: rgba(31,215,255,.10);
+    color: #9eeaff;
+    font-weight: 900;
+}
+
+.motion-preview-meta-row {
+    display: grid;
+    grid-template-columns: .8fr 1fr 1fr .75fr;
+    gap: .6rem;
+}
+
+.motion-preview-meta-row > div {
+    min-width: 0;
+    padding: .55rem .65rem;
+    border: 1px solid rgba(255,255,255,.075);
+    border-radius: 14px;
+    background: rgba(0,0,0,.13);
+}
+
+.motion-preview-meta-row strong {
+    display: block;
+    margin-top: .24rem;
+    color: rgba(255,255,255,.95);
+    font-size: .86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.motion-preview-track-block {
+    display: grid;
+    grid-template-columns: 168px minmax(0, 1fr);
+    gap: .75rem;
+    align-items: center;
+    margin-top: .62rem;
+}
+
+.motion-preview-track-label strong {
+    display: block;
+    color: rgba(255,255,255,.94);
+    font-size: .86rem;
+}
+
+.motion-preview-track-label span {
+    margin-top: .2rem;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 650;
+}
+
+.motion-preview-track {
+    position: relative;
+    height: 42px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 15px;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px 8.33%), rgba(4, 10, 22, .55);
+}
+
+.motion-preview-track-dense {
+    height: 34px;
+}
+
+.motion-preview-auto-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    z-index: 5;
+    background: rgba(116, 220, 255, .95);
+    box-shadow: 0 0 14px rgba(116, 220, 255, .65);
+    animation: motionPreviewCursor 4.8s linear infinite;
+}
+
+.motion-preview-segment {
+    position: absolute;
+    top: 7px;
+    bottom: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    min-width: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(116, 220, 255, .24);
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(31,215,255,.24), rgba(118,105,255,.22));
+    color: rgba(255,255,255,.94);
+    font-size: .72rem;
+    font-weight: 850;
+    white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 0 18px rgba(31,215,255,.08);
+}
+
+.motion-preview-segment::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-110%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.24), transparent);
+    animation: motionPreviewShine 2.8s ease-in-out infinite;
+}
+
+.motion-preview-segment span,
+.motion-preview-segment small {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.motion-preview-segment small {
+    color: rgba(255,255,255,.72);
+}
+
+.motion-preview-segment-activity {
+    top: 8px;
+    bottom: 8px;
+    border-color: rgba(116, 190, 255, .26);
+    background: linear-gradient(90deg, rgba(68, 157, 255, .30), rgba(31,215,255,.19));
+    font-size: .66rem;
+}
+
+.motion-preview-segment-child {
+    border-color: rgba(157, 124, 255, .28);
+    background: linear-gradient(90deg, rgba(118,105,255,.32), rgba(31,215,255,.18));
+}
+
+.motion-preview-segment.is-continued {
+    border-color: rgba(78, 226, 140, .28);
+    background: linear-gradient(90deg, rgba(46, 204, 113, .25), rgba(31,215,255,.20));
+}
+
+.motion-preview-segment.is-problem {
+    border-color: rgba(255, 107, 107, .38);
+    background: linear-gradient(90deg, rgba(255,107,107,.32), rgba(255,190,90,.20));
+}
+
+.motion-preview-segment.is-current,
+.motion-preview-segment.is-waiting {
+    animation: motionPreviewGlow 1.8s ease-in-out infinite;
+}
+
+.motion-preview-child-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .55rem;
+}
+
+.motion-preview-child-card,
+.motion-preview-child-more {
+    min-width: 0;
+    padding: .7rem .75rem;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 16px;
+    background: rgba(255,255,255,.04);
+    color: rgba(255,255,255,.92);
+    text-align: left;
+}
+
+.motion-preview-child-card {
+    cursor: pointer;
+}
+
+.motion-preview-child-card:hover {
+    border-color: rgba(31,215,255,.28);
+    background: rgba(31,215,255,.065);
+}
+
+.motion-preview-child-card > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .45rem;
+}
+
+.motion-preview-child-card > span,
+.motion-preview-child-more {
+    display: block;
+    color: rgba(255,255,255,.60);
+    font-size: .78rem;
+}
+
+.motion-preview-mini-track {
+    height: 6px;
+    overflow: hidden;
+    margin-top: .55rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,.08);
+}
+
+.motion-preview-mini-bar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(118,105,255,.9), rgba(31,215,255,.95));
+    animation: motionPreviewMiniFlow 2.3s ease-in-out infinite;
+}
+
+.motion-preview-mini-bar.is-problem {
+    background: linear-gradient(90deg, rgba(255,107,107,.95), rgba(255,190,90,.9));
+}
+
+.motion-preview-marker-row,
+.motion-preview-orphan-children {
+    margin-top: .7rem;
+    padding-top: .7rem;
+    border-top: 1px solid rgba(255,255,255,.07);
+}
+
+.motion-preview-marker-row {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.motion-preview-marker-row > span:first-child {
+    margin-right: .25rem;
+    color: rgba(255,255,255,.62);
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.motion-preview-marker {
+    display: inline-flex;
+    align-items: center;
+    padding: .22rem .5rem;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 999px;
+    background: rgba(255,255,255,.055);
+    color: rgba(255,255,255,.74);
+    font-size: .72rem;
+    font-weight: 750;
+}
+
+.motion-preview-marker.is-problem {
+    border-color: rgba(255,107,107,.35);
+    color: #ffb3b3;
+    background: rgba(255,107,107,.10);
+}
+
+.motion-preview-overflow {
+    position: absolute;
+    right: .6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 8;
+    padding: .2rem .45rem;
+    border-radius: 999px;
+    background: rgba(5, 11, 24, .88);
+    color: rgba(255,255,255,.70);
+    font-size: .72rem;
+    font-weight: 800;
+}
+
+.motion-preview-orphan-children > div:first-child {
+    display: grid;
+    gap: .15rem;
+    margin-bottom: .6rem;
+}
+
+.motion-preview-orphan-children > div:first-child span {
+    color: rgba(255,255,255,.60);
+    font-size: .82rem;
+}
+
+@keyframes motionPreviewCursor {
+    0% { left: 0%; opacity: .0; }
+    4% { opacity: 1; }
+    96% { opacity: 1; }
+    100% { left: 100%; opacity: .0; }
+}
+
+@keyframes motionPreviewShine {
+    0%, 35% { transform: translateX(-120%); opacity: 0; }
+    50% { opacity: .85; }
+    75%, 100% { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes motionPreviewGlow {
+    0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 0 16px rgba(31,215,255,.10); }
+    50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 24px rgba(31,215,255,.24); }
+}
+
+@keyframes motionPreviewMiniFlow {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.25); }
+}
+
+@keyframes motionPreviewPulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(116, 220, 255, .42); }
+    70% { transform: scale(1.04); box-shadow: 0 0 0 8px rgba(116, 220, 255, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(116, 220, 255, 0); }
+}
+
+@media (max-width: 1200px) {
+    .workflow-motion-preview-head,
+    .motion-preview-card-head {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow-motion-preview-head {
+        flex-direction: column;
+    }
+
+    .motion-preview-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .motion-preview-window {
+        grid-column: 1 / -1;
+    }
+
+    .motion-preview-track-block {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* v13: per-execution detail links and grouped detail clarity */
+.motion-preview-card-head {
+    grid-template-columns: minmax(250px, 1.05fr) minmax(420px, 1.85fr) auto;
+}
+
+.motion-preview-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 116px;
+}
+
+.motion-preview-child-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .6rem;
+    margin-bottom: .45rem;
+}
+
+.motion-preview-child-card-head > div {
+    min-width: 0;
+    display: grid;
+    gap: .18rem;
+}
+
+.motion-preview-child-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .62rem;
+}
+
+.detail-focus-panel,
+.grouped-detail-overview {
+    margin-bottom: 1rem;
+}
+
+.detail-focus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .75rem;
+    margin-top: .85rem;
+}
+
+.detail-focus-grid > div {
+    padding: .75rem .85rem;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    background: rgba(255,255,255,.045);
+}
+
+.detail-focus-grid span {
+    display: block;
+    color: rgba(255,255,255,.56);
+    font-size: .74rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.detail-focus-grid strong {
+    display: block;
+    margin-top: .28rem;
+    color: rgba(255,255,255,.94);
+}
+
+.grouped-overview-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.detail-run-grid-with-action {
+    grid-template-columns: minmax(180px, 1.1fr) minmax(160px, .9fr) minmax(190px, 1.2fr) minmax(190px, 1.2fr) minmax(90px, .5fr) minmax(100px, .6fr) minmax(92px, .5fr);
+}
+
+.chain-run-action-field {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .34rem;
+}
+
+@media (max-width: 1100px) {
+    .motion-preview-card-head {
+        grid-template-columns: 1fr;
+    }
+
+    .motion-preview-card-actions {
+        justify-content: flex-start;
+    }
+
+    .detail-run-grid-with-action {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

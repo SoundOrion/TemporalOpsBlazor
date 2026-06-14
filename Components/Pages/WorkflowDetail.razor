@@ -1,15 +1,16 @@
 @page "/workflows/{WorkflowId}"
+@page "/workflows/{WorkflowId}/runs/{RunId}"
 @inject ITemporalOperationsService Temporal
 @inject NavigationManager Nav
 
-<PageTitle>Workflow Detail - TemporalOps</PageTitle>
+<PageTitle>@(IsRunDetail ? "Workflow Run Detail" : "Grouped Workflow Detail") - TemporalOps</PageTitle>
 
 @if (_detail is null)
 {
     <section class="empty-state">
         <p class="eyebrow">Workflow detail</p>
         <h1>Workflow not found</h1>
-        <p>Check the Workflow ID and try again.</p>
+        <p>Check the Workflow ID and Run ID, then try again.</p>
         <button class="button" @onclick="BackToList">Back to list</button>
     </section>
 }
@@ -18,53 +19,83 @@ else
     var workflow = _detail.Summary;
     <section class="detail-hero">
         <div>
-            <p class="eyebrow">Workflow Detail</p>
+            <p class="eyebrow">@(IsRunDetail ? "Workflow Run Detail" : "Grouped Workflow Detail")</p>
             <h1>@workflow.WorkflowId</h1>
             <div class="detail-tags">
                 <StatusBadge Value="@workflow.Status" />
                 <StatusBadge Value="@workflow.Risk" />
                 <code>@workflow.TaskQueue</code>
                 <span>@workflow.WorkflowType</span>
+                @if (IsRunDetail)
+                {
+                    <span>run <code>@ShortRunId(workflow.RunId)</code></span>
+                }
+                else if (workflow.HasContinuationChain)
+                {
+                    <span>@workflow.ContinuationRunCount grouped runs</span>
+                }
             </div>
         </div>
         <div class="detail-actions">
             <button class="button button-ghost" @onclick="BackToList">Back</button>
+            @if (IsRunDetail)
+            {
+                <button class="button button-ghost" @onclick="OpenGroupedDetail">Grouped detail</button>
+            }
+            else if (!string.IsNullOrWhiteSpace(workflow.RunId))
+            {
+                <button class="button button-ghost" @onclick="() => OpenRunDetail(workflow.WorkflowId, workflow.RunId)">Current run detail</button>
+            }
             <button class="button" @onclick="() => _selectedWorkflow = workflow">Operator action</button>
         </div>
     </section>
 
-    <section class="detail-grid">
-        <article class="panel">
-            <div class="panel-header"><h2>Execution metadata</h2></div>
-            <dl class="meta-grid">
-                <dt>Run ID</dt><dd><code>@workflow.RunId</code></dd>
-                <dt>Started</dt><dd>@workflow.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd>
-                <dt>Closed</dt><dd>@(workflow.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "-")</dd>
-                <dt>Attempt</dt><dd>@workflow.Attempt</dd>
-                <dt>Pending Activities</dt><dd>@workflow.PendingActivities</dd>
-                <dt>History Length</dt><dd>@workflow.HistoryLength</dd>
-                <dt>Search Attrs</dt><dd>@workflow.SearchAttributes</dd>
-            </dl>
-        </article>
-
-        <article class="panel">
-            <div class="panel-header"><h2>Open Signals</h2></div>
-            <div class="signal-list">
-                @foreach (var signal in _detail.OpenSignals)
-                {
-                    <button class="pill" @onclick="() => StartSignal(signal)">@signal</button>
-                }
+    @if (IsRunDetail)
+    {
+        <section class="panel detail-focus-panel">
+            <div>
+                <p class="eyebrow">Execution focus</p>
+                <h2>Single workflow execution motion</h2>
+                <p class="muted-text">This page focuses on one Workflow ID / Run ID. Use Grouped detail when you need the full Continue-As-New chain context.</p>
             </div>
-            <p class="muted-text">Common signals can be prefilled in Operator Action.</p>
-        </article>
+            <div class="detail-focus-grid">
+                <div><span>Run ID</span><strong><code>@ShortRunId(workflow.RunId)</code></strong></div>
+                <div><span>Status</span><StatusBadge Value="@workflow.Status" /></div>
+                <div><span>Started</span><strong>@FormatDateTime(workflow.StartedAt)</strong></div>
+                <div><span>Closed</span><strong>@(workflow.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "running")</strong></div>
+            </div>
+        </section>
 
-        @if (_detail.ContinuationRuns.Count > 1)
+        <WorkflowMotionView Motion="@_detail.Motion" />
+    }
+    else
+    {
+        <section class="panel grouped-detail-overview">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Grouped execution overview</p>
+                    <h2>Current operational picture</h2>
+                </div>
+                <span class="chain-badge">@workflow.ContinuationRunCount run(s)</span>
+            </div>
+            <div class="detail-focus-grid grouped-overview-grid">
+                <div><span>Current run</span><strong><code>@ShortRunId(workflow.RunId)</code></strong></div>
+                <div><span>Status</span><StatusBadge Value="@workflow.Status" /></div>
+                <div><span>Business window</span><strong>@FormatDateTime(workflow.StartedAt)</strong></div>
+                <div><span>Latency</span><strong>@workflow.LatencySeconds.ToString("N1")s</strong></div>
+                <div><span>History</span><strong>@workflow.HistoryLength</strong></div>
+                <div><span>Pending</span><strong>@workflow.PendingActivities</strong></div>
+            </div>
+            <p class="muted-text">This grouped page keeps the overall operational context compact. Open a Run detail from the chain below to view motion for that execution only.</p>
+        </section>
+
+        @if (_detail.ContinuationRuns.Count > 0)
         {
-            <article class="panel panel-wide">
+            <section class="panel panel-wide">
                 <div class="panel-header">
                     <div>
-                        <p class="eyebrow">Continue-As-New</p>
-                        <h2>Grouped as one workflow run chain</h2>
+                        <p class="eyebrow">Continue-As-New context</p>
+                        <h2>Run detail navigator</h2>
                     </div>
                     <span class="chain-badge">@_detail.ContinuationRuns.Count runs</span>
                 </div>
@@ -72,7 +103,7 @@ else
                     @foreach (var run in _detail.ContinuationRuns.OrderBy(r => r.StartedAt))
                     {
                         <div class="@DetailRunClass(run)">
-                            <div class="detail-run-grid">
+                            <div class="detail-run-grid detail-run-grid-with-action">
                                 <div class="chain-run-field chain-run-id-field">
                                     <span class="chain-field-label">Run ID</span>
                                     <div class="chain-run-idline">
@@ -103,18 +134,49 @@ else
                                     <span class="chain-field-label">Latency</span>
                                     <strong>@run.LatencySeconds.ToString("N1")s</strong>
                                 </div>
+                                <div class="chain-run-field compact-field chain-run-action-field">
+                                    <span class="chain-field-label">Detail</span>
+                                    <button class="button button-ghost button-compact" @onclick="() => OpenRunDetail(run.WorkflowId, run.RunId)">Details</button>
+                                </div>
                             </div>
                         </div>
                     }
                 </div>
-            </article>
+            </section>
         }
+    }
+
+    <section class="detail-grid">
+        <article class="panel">
+            <div class="panel-header"><h2>Execution metadata</h2></div>
+            <dl class="meta-grid">
+                <dt>Workflow ID</dt><dd><code>@workflow.WorkflowId</code></dd>
+                <dt>Run ID</dt><dd><code>@workflow.RunId</code></dd>
+                <dt>Started</dt><dd>@workflow.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd>
+                <dt>Closed</dt><dd>@(workflow.ClosedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "-")</dd>
+                <dt>Attempt</dt><dd>@workflow.Attempt</dd>
+                <dt>Pending Activities</dt><dd>@workflow.PendingActivities</dd>
+                <dt>History Length</dt><dd>@workflow.HistoryLength</dd>
+                <dt>Search Attrs</dt><dd>@workflow.SearchAttributes</dd>
+            </dl>
+        </article>
+
+        <article class="panel">
+            <div class="panel-header"><h2>Open Signals</h2></div>
+            <div class="signal-list">
+                @foreach (var signal in _detail.OpenSignals)
+                {
+                    <button class="pill" @onclick="() => StartSignal(signal)">@signal</button>
+                }
+            </div>
+            <p class="muted-text">Common signals can be prefilled in Operator Action.</p>
+        </article>
 
         <article class="panel panel-wide">
             <div class="panel-header">
                 <div>
                     <p class="eyebrow">History</p>
-                    <h2>Event timeline</h2>
+                    <h2>@(IsRunDetail ? "Run event timeline" : "Grouped current-run timeline")</h2>
                 </div>
             </div>
             <div class="timeline">
@@ -148,9 +210,12 @@ else
 
 @code {
     [Parameter] public string? WorkflowId { get; set; }
+    [Parameter] public string? RunId { get; set; }
 
     private TemporalOpsBlazor.Models.WorkflowDetail? _detail;
     private WorkflowExecutionSummary? _selectedWorkflow;
+
+    private bool IsRunDetail => !string.IsNullOrWhiteSpace(RunId);
 
     protected override Task OnParametersSetAsync() => ReloadAsync();
 
@@ -158,7 +223,7 @@ else
     {
         if (!string.IsNullOrWhiteSpace(WorkflowId))
         {
-            _detail = await Temporal.GetWorkflowAsync(WorkflowId);
+            _detail = await Temporal.GetWorkflowAsync(WorkflowId, RunId);
         }
     }
 
@@ -166,10 +231,30 @@ else
 
     private void BackToList() => Nav.NavigateTo("/workflows");
 
+    private void OpenGroupedDetail()
+    {
+        if (!string.IsNullOrWhiteSpace(WorkflowId))
+        {
+            Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(WorkflowId)}");
+        }
+    }
+
+    private void OpenRunDetail(string workflowId, string runId)
+    {
+        if (!string.IsNullOrWhiteSpace(workflowId) && !string.IsNullOrWhiteSpace(runId))
+        {
+            Nav.NavigateTo($"/workflows/{Uri.EscapeDataString(workflowId)}/runs/{Uri.EscapeDataString(runId)}");
+        }
+    }
+
     private void StartSignal(string signalName)
     {
         _selectedWorkflow = _detail?.Summary;
     }
+
+    private bool IsRunDetailFor(WorkflowRunSummary run) =>
+        !string.IsNullOrWhiteSpace(RunId) &&
+        string.Equals(run.RunId, RunId, StringComparison.OrdinalIgnoreCase);
 
     private static string DetailRunClass(WorkflowRunSummary run) =>
         run.IsCurrent ? "detail-run-node is-current" : "detail-run-node";

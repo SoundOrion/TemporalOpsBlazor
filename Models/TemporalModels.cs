@@ -101,6 +101,7 @@ public sealed class WorkflowDetail
     public WorkflowExecutionSummary Summary { get; set; } = new();
     public IReadOnlyList<WorkflowHistoryEvent> History { get; set; } = [];
     public IReadOnlyList<WorkflowRunSummary> ContinuationRuns { get; set; } = [];
+    public WorkflowMotion Motion { get; set; } = new();
     public IReadOnlyList<string> OpenSignals { get; set; } = [];
     public string InputJson { get; set; } = "{}";
     public string MemoJson { get; set; } = "{}";
@@ -113,6 +114,83 @@ public sealed class WorkflowHistoryEvent
     public string EventType { get; set; } = string.Empty;
     public string Details { get; set; } = string.Empty;
     public bool IsProblem { get; set; }
+}
+
+public sealed class WorkflowMotion
+{
+    public string WorkflowId { get; set; } = string.Empty;
+    public string CurrentRunId { get; set; } = string.Empty;
+    public WorkflowStatus OverallStatus { get; set; }
+    public RiskLevel Risk { get; set; }
+    public DateTimeOffset TimelineStart { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset TimelineEnd { get; set; } = DateTimeOffset.UtcNow;
+    public decimal TotalDurationSeconds { get; set; }
+    public int RunCount { get; set; }
+    public int ChildWorkflowCount { get; set; }
+    public int ActivityCount { get; set; }
+    public int ProblemCount { get; set; }
+    public string CurrentState { get; set; } = "Unknown";
+    public string BusinessImpact { get; set; } = "No impact analysis available.";
+    public string RecommendedAction { get; set; } = "Review the workflow history before taking operator action.";
+    public IReadOnlyList<WorkflowMotionLane> Lanes { get; set; } = [];
+    public IReadOnlyList<WorkflowMotionMarker> Markers { get; set; } = [];
+    public IReadOnlyList<WorkflowMotionFinding> Findings { get; set; } = [];
+}
+
+public sealed class WorkflowMotionLane
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Subtitle { get; set; } = string.Empty;
+    public string Kind { get; set; } = "default";
+    public int DisplayLevel { get; set; } = 1;
+    public IReadOnlyList<WorkflowMotionSegment> Segments { get; set; } = [];
+    public IReadOnlyList<WorkflowMotionMarker> Markers { get; set; } = [];
+}
+
+public sealed class WorkflowMotionSegment
+{
+    public string Id { get; set; } = string.Empty;
+    public string LaneId { get; set; } = string.Empty;
+    public string Kind { get; set; } = "segment";
+    public string Label { get; set; } = string.Empty;
+    public string Details { get; set; } = string.Empty;
+    public WorkflowStatus Status { get; set; }
+    public DateTimeOffset StartTime { get; set; }
+    public DateTimeOffset EndTime { get; set; }
+    public long StartEventId { get; set; }
+    public long EndEventId { get; set; }
+    public string WorkflowId { get; set; } = string.Empty;
+    public string RunId { get; set; } = string.Empty;
+    public bool IsCurrent { get; set; }
+    public bool IsProblem { get; set; }
+    public bool IsWaiting { get; set; }
+    public int DisplayLevel { get; set; } = 1;
+    public decimal OffsetPercent { get; set; }
+    public decimal WidthPercent { get; set; }
+}
+
+public sealed class WorkflowMotionMarker
+{
+    public string Id { get; set; } = string.Empty;
+    public string LaneId { get; set; } = string.Empty;
+    public string Kind { get; set; } = "marker";
+    public string Label { get; set; } = string.Empty;
+    public string Details { get; set; } = string.Empty;
+    public DateTimeOffset Timestamp { get; set; }
+    public long EventId { get; set; }
+    public bool IsProblem { get; set; }
+    public int DisplayLevel { get; set; } = 2;
+    public decimal OffsetPercent { get; set; }
+}
+
+public sealed class WorkflowMotionFinding
+{
+    public RiskLevel Severity { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string RecommendedAction { get; set; } = string.Empty;
+    public long? EventId { get; set; }
 }
 
 public sealed class WorkerSummary

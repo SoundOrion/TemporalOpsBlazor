@@ -89,3 +89,49 @@ Temporalでは Continue-As-New により、同じWorkflow IDのまま新しいRu
 - 操作ログの長期保存と検索
 - OpenTelemetry / Prometheus による外部監視連携
 - Runbook、インシデント管理、オンコール通知との連携
+
+## Motion View の実装方針
+
+`WorkflowMotionView.razor` は、Workflow Historyを直接そのまま表示するのではなく、`WorkflowMotion` DTOへ変換した結果を表示します。
+
+実Temporal接続では `FetchHistoryEventsAsync` でHistory Eventを取得し、以下のカテゴリに正規化します。
+
+- Run segment: Continue-As-Newでつながる各Run
+- Child workflow segment: ChildWorkflowExecutionStarted / Completed / Failed / TimedOut など
+- Activity segment: ActivityTaskScheduled / Started / Completed / Failed / TimedOut など
+- Marker: Continue-As-New、Signal、Timer、異常終了など
+- Finding: 運用判断向けの異常ハイライト
+
+表示は1本の巨大なタイムラインではなく、RunごとのMotionカードを中心にしています。各Runカードの中に、そのRunで発生したActivity、Child Workflow、Signal/Timerを重ねるため、Continue-As-Newが多いWorkflowでも粒が潰れにくくなります。Child Workflowも個別カードとして表示し、必要に応じて詳細画面へ遷移できます。
+
+Motion Viewは「デバッグ用の完全なイベント羅列」ではなく、「現在どこで止まっているか」「どこが業務影響の起点か」「次に何を確認すべきか」を見せるためのビューです。詳細な全イベントは従来のEvent timelineで確認できます。
+
+## Workflow一覧のMotion Preview
+
+Workflow一覧の展開行では、単なるContinue-As-NewのRun一覧ではなく、対象WorkflowごとのMotion Previewを表示します。
+
+- 各Continue-As-New Runは独立したWorkflow executionカードとして表示します。
+- ActivityはRunカード内の主要セグメントとして表示します。
+- Child Workflowは親Runの下に別カードとして表示し、クリックで該当Workflowの詳細へ遷移します。
+- 一覧表示時点では詳細Historyを取得せず、行を展開したタイミングで遅延取得します。
+
+この構成により、運用管理者は「同じWorkflow IDに属するRun全体」ではなく、「各Workflow executionで実際に何が起きたか」を確認できます。
+
+## v13: 詳細画面の粒度
+
+運用画面では、Continue-As-New でつながる Workflow ID をひとつの業務単位として扱います。ただし、調査や説明責任では個別 Run 単位の確認も必要になるため、詳細画面を2段構成にしています。
+
+- Grouped Detail: `/workflows/{workflowId}`
+  - Workflow ID 全体の運用判断、Current Run、Run chain、Child Workflow を確認します。
+- Run Detail: `/workflows/{workflowId}/runs/{runId}`
+  - 特定 Run の Motion View と Event History を確認します。
+
+一覧の展開プレビューにも Run detail / Child detail の導線を表示しています。
+
+## v14: Continue-As-NewとRun Detailの表示方針
+
+運用一覧では、Continue-As-Newで連なるRunをツリー状の軽量サマリとして表示します。
+一覧ではモーション表示を行わず、Status / Start Time / Close Time / History / Latency を確認できるようにしています。
+
+個別Runの `Details` リンクからRun Detailへ遷移すると、そのRun単体のHistoryを元にMotion Viewを表示します。
+これにより、一覧は監視・絞り込み・状況把握に集中し、詳細画面は個別Executionの解析に集中する構成になります。

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using Google.Protobuf;
 using Microsoft.Extensions.Options;
@@ -139,7 +140,9 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             var handle = client.GetWorkflowHandle(workflowId, EmptyToNull(runId));
             var description = await handle.DescribeAsync(new WorkflowDescribeOptions { Rpc = Rpc(cancellationToken) });
             var summary = await MapWorkflowAsync(description, client.Options.Namespace);
+            var describedRunId = summary.RunId;
 
+            var rawHistory = new List<HistoryEvent>();
             var history = new List<WorkflowHistoryEvent>();
             string inputJson = "{}";
             var count = 0;
@@ -153,6 +156,8 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                     break;
                 }
 
+                rawHistory.Add(ev);
+
                 if (ev.EventType == EventType.WorkflowExecutionStarted && ev.WorkflowExecutionStartedEventAttributes?.Input is not null)
                 {
                     inputJson = FormatMessage(ev.WorkflowExecutionStartedEventAttributes.Input);
@@ -162,13 +167,38 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
             }
 
             var continuationRuns = await LoadContinuationRunsAsync(client, workflowId, cancellationToken);
-            summary = BuildContinuationGroup(summary, continuationRuns);
+            if (continuationRuns.Count == 0)
+            {
+                continuationRuns = [ToRunSummary(summary, true)];
+            }
+
+            var groupedSummary = BuildContinuationGroup(summary, continuationRuns);
+            var detailSummary = groupedSummary;
+            var motionRuns = groupedSummary.ContinuationRuns;
+
+            if (!string.IsNullOrWhiteSpace(runId))
+            {
+                var selectedRun = continuationRuns.FirstOrDefault(r => string.Equals(r.RunId, describedRunId, StringComparison.OrdinalIgnoreCase))
+                    ?? ToRunSummary(summary, true);
+
+                detailSummary = CloneForSingleRun(summary, selectedRun);
+                motionRuns = detailSummary.ContinuationRuns;
+            }
+
+            var motion = await BuildWorkflowMotionAsync(
+                client,
+                detailSummary,
+                motionRuns,
+                rawHistory,
+                describedRunId,
+                cancellationToken);
 
             return new TemporalOpsBlazor.Models.WorkflowDetail
             {
-                Summary = summary,
+                Summary = detailSummary,
                 History = history,
-                ContinuationRuns = summary.ContinuationRuns,
+                ContinuationRuns = groupedSummary.ContinuationRuns,
+                Motion = motion,
                 OpenSignals = GuessSignals(history),
                 InputJson = inputJson,
                 MemoJson = await FormatMemoAsync(description.Memo),
@@ -580,6 +610,31 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         IsCurrent = isCurrent,
     };
 
+    private static WorkflowExecutionSummary CloneForSingleRun(WorkflowExecutionSummary source, WorkflowRunSummary selectedRun)
+    {
+        return new WorkflowExecutionSummary
+        {
+            WorkflowId = source.WorkflowId,
+            RunId = selectedRun.RunId,
+            WorkflowType = source.WorkflowType,
+            Status = selectedRun.Status,
+            TaskQueue = string.IsNullOrWhiteSpace(selectedRun.TaskQueue) ? source.TaskQueue : selectedRun.TaskQueue,
+            Namespace = source.Namespace,
+            StartedAt = selectedRun.StartedAt,
+            ClosedAt = selectedRun.ClosedAt,
+            Attempt = source.Attempt,
+            PendingActivities = source.PendingActivities,
+            HistoryLength = selectedRun.HistoryLength,
+            LatencySeconds = selectedRun.LatencySeconds,
+            Risk = source.Risk,
+            Owner = source.Owner,
+            Memo = source.Memo,
+            SearchAttributes = source.SearchAttributes,
+            ContinuationRunCount = 1,
+            ContinuationRuns = [selectedRun],
+        };
+    }
+
     private async Task<WorkflowExecutionSummary> MapWorkflowAsync(ClientWorkflowExecution workflow, string ns)
     {
         var status = MapStatus(workflow.Status);
@@ -639,6 +694,962 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
                 || eventType.Contains("TimedOut", StringComparison.OrdinalIgnoreCase)
                 || eventType.Contains("Terminated", StringComparison.OrdinalIgnoreCase),
         };
+    }
+
+
+    private async Task<WorkflowMotion> BuildWorkflowMotionAsync(
+        TemporalClient client,
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowRunSummary> continuationRuns,
+        IReadOnlyList<HistoryEvent> currentRunHistory,
+        string? currentRunHistoryRunId,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var runs = continuationRuns.Count > 0
+            ? continuationRuns.OrderBy(r => r.StartedAt).ToList()
+            : new List<WorkflowRunSummary> { ToRunSummary(summary, true) };
+
+        if (runs.Count == 0)
+        {
+            runs = new List<WorkflowRunSummary> { ToRunSummary(summary, true) };
+        }
+
+        var runHistories = new Dictionary<string, IReadOnlyList<HistoryEvent>>(StringComparer.OrdinalIgnoreCase);
+        var currentHistoryRunId = string.IsNullOrWhiteSpace(currentRunHistoryRunId) ? summary.RunId : currentRunHistoryRunId;
+        if (currentRunHistory.Count > 0 && !string.IsNullOrWhiteSpace(currentHistoryRunId))
+        {
+            runHistories[currentHistoryRunId] = currentRunHistory;
+        }
+
+        foreach (var run in runs.Take(50))
+        {
+            if (string.IsNullOrWhiteSpace(run.RunId) || runHistories.ContainsKey(run.RunId))
+            {
+                continue;
+            }
+
+            runHistories[run.RunId] = await LoadHistoryEventsAsync(
+                client,
+                run.WorkflowId,
+                run.RunId,
+                Math.Max(1, _settings.HistoryEventLimit),
+                cancellationToken);
+        }
+
+        var timelineStart = runs.Min(r => r.StartedAt);
+        var timelineEnd = runs
+            .Select(r => r.ClosedAt ?? now)
+            .DefaultIfEmpty(now)
+            .Max();
+
+        if (timelineEnd <= timelineStart)
+        {
+            timelineEnd = timelineStart.AddSeconds(1);
+        }
+
+        var runSegments = runs.Select(run => new WorkflowMotionSegment
+        {
+            Id = $"run-{SafeId(run.RunId)}",
+            LaneId = "run-chain",
+            Kind = "run",
+            Label = ShortId(run.RunId),
+            Details = $"{run.Status} / {run.HistoryLength:N0} events / {run.LatencySeconds:N1}s",
+            Status = run.Status,
+            StartTime = run.StartedAt,
+            EndTime = run.ClosedAt ?? now,
+            WorkflowId = run.WorkflowId,
+            RunId = run.RunId,
+            IsCurrent = run.IsCurrent,
+            IsProblem = IsProblemStatus(run.Status),
+            IsWaiting = run.Status == OpsWorkflowStatus.Running,
+            DisplayLevel = 1,
+        }).ToList();
+
+        var rootSegment = new WorkflowMotionSegment
+        {
+            Id = $"workflow-{SafeId(summary.WorkflowId)}",
+            LaneId = "workflow",
+            Kind = "workflow",
+            Label = summary.WorkflowType,
+            Details = $"{summary.WorkflowId} / {summary.Status}",
+            Status = summary.Status,
+            StartTime = timelineStart,
+            EndTime = summary.ClosedAt ?? timelineEnd,
+            WorkflowId = summary.WorkflowId,
+            RunId = summary.RunId,
+            IsCurrent = summary.Status == OpsWorkflowStatus.Running,
+            IsProblem = IsProblemStatus(summary.Status),
+            IsWaiting = summary.Status == OpsWorkflowStatus.Running,
+            DisplayLevel = 1,
+        };
+
+        var childSegments = new List<WorkflowMotionSegment>();
+        var activitySegments = new List<WorkflowMotionSegment>();
+        var operationalMarkers = new List<WorkflowMotionMarker>();
+        var allMarkers = new List<WorkflowMotionMarker>();
+
+        foreach (var run in runs)
+        {
+            if (!runHistories.TryGetValue(run.RunId, out var events) || events.Count == 0)
+            {
+                continue;
+            }
+
+            childSegments.AddRange(ExtractChildWorkflowSegments(summary.WorkflowId, run.RunId, events, now));
+            activitySegments.AddRange(ExtractActivitySegments(summary.WorkflowId, run.RunId, events, now));
+            allMarkers.AddRange(ExtractWorkflowMarkers("run-chain", events));
+            operationalMarkers.AddRange(ExtractOperationalMarkers(events));
+        }
+
+        var childLaneMarkers = allMarkers
+            .Where(m => m.Kind.Contains("child", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var activityLaneMarkers = allMarkers
+            .Where(m => m.Kind.Contains("activity", StringComparison.OrdinalIgnoreCase) || m.Kind.Contains("timer", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var runLaneMarkers = allMarkers
+            .Where(m => !childLaneMarkers.Contains(m) && !activityLaneMarkers.Contains(m))
+            .ToList();
+
+        var lanes = new List<WorkflowMotionLane>
+        {
+            new()
+            {
+                Id = "workflow",
+                Title = "Overall execution",
+                Subtitle = "Business-level execution window across all related runs.",
+                Kind = "workflow",
+                DisplayLevel = 1,
+                Segments = [rootSegment],
+            },
+            new()
+            {
+                Id = "run-chain",
+                Title = "Continue-As-New run chain",
+                Subtitle = "Same Workflow ID, ordered from the first run to the current run.",
+                Kind = "run",
+                DisplayLevel = 1,
+                Segments = runSegments,
+                Markers = runLaneMarkers,
+            }
+        };
+
+        if (childSegments.Count > 0 || childLaneMarkers.Count > 0)
+        {
+            lanes.Add(new WorkflowMotionLane
+            {
+                Id = "children",
+                Title = "Child workflows",
+                Subtitle = "Downstream workflow executions started by the parent.",
+                Kind = "child",
+                DisplayLevel = 1,
+                Segments = childSegments
+                    .OrderBy(s => s.StartTime)
+                    .ThenBy(s => s.Label, StringComparer.OrdinalIgnoreCase)
+                    .Take(120)
+                    .ToList(),
+                Markers = childLaneMarkers,
+            });
+        }
+
+        if (activitySegments.Count > 0 || activityLaneMarkers.Count > 0)
+        {
+            lanes.Add(new WorkflowMotionLane
+            {
+                Id = "activities",
+                Title = "Major activities",
+                Subtitle = "Activities collapsed into operationally useful segments.",
+                Kind = "activity",
+                DisplayLevel = 2,
+                Segments = activitySegments
+                    .OrderBy(s => s.StartTime)
+                    .ThenByDescending(s => s.IsProblem)
+                    .Take(160)
+                    .ToList(),
+                Markers = activityLaneMarkers,
+            });
+        }
+
+        if (operationalMarkers.Count > 0)
+        {
+            lanes.Add(new WorkflowMotionLane
+            {
+                Id = "operator-events",
+                Title = "Signals, timers, and operator-relevant events",
+                Subtitle = "Events that typically explain why the workflow moved or waited.",
+                Kind = "marker",
+                DisplayLevel = 3,
+                Segments = [],
+                Markers = operationalMarkers
+                    .OrderBy(m => m.Timestamp)
+                    .Take(180)
+                    .ToList(),
+            });
+        }
+
+        NormalizeMotionLayout(lanes, timelineStart, timelineEnd);
+
+        var problemSegments = lanes.SelectMany(l => l.Segments).Where(s => s.IsProblem).ToList();
+        var problemMarkers = lanes.SelectMany(l => l.Markers).Where(m => m.IsProblem).ToList();
+        var findings = BuildMotionFindings(summary, runs, childSegments, activitySegments, problemMarkers, now);
+        var recommendedAction = BuildRecommendedAction(summary, findings, childSegments, activitySegments, runs);
+
+        return new WorkflowMotion
+        {
+            WorkflowId = summary.WorkflowId,
+            CurrentRunId = summary.RunId,
+            OverallStatus = summary.Status,
+            Risk = summary.Risk,
+            TimelineStart = timelineStart,
+            TimelineEnd = timelineEnd,
+            TotalDurationSeconds = (decimal)Math.Max(0, (timelineEnd - timelineStart).TotalSeconds),
+            RunCount = runs.Count,
+            ChildWorkflowCount = childSegments
+                .Select(s => string.IsNullOrWhiteSpace(s.WorkflowId) ? s.Label : s.WorkflowId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            ActivityCount = activitySegments.Count,
+            ProblemCount = problemSegments.Count + problemMarkers.Count,
+            CurrentState = BuildCurrentState(summary, runs, activitySegments, childSegments, now),
+            BusinessImpact = BuildBusinessImpact(summary, childSegments, activitySegments),
+            RecommendedAction = recommendedAction,
+            Lanes = lanes,
+            Markers = lanes.SelectMany(l => l.Markers).OrderBy(m => m.Timestamp).ToList(),
+            Findings = findings,
+        };
+    }
+
+    private async Task<IReadOnlyList<HistoryEvent>> LoadHistoryEventsAsync(
+        TemporalClient client,
+        string workflowId,
+        string? runId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var events = new List<HistoryEvent>();
+        if (string.IsNullOrWhiteSpace(workflowId))
+        {
+            return events;
+        }
+
+        try
+        {
+            var handle = client.GetWorkflowHandle(workflowId, EmptyToNull(runId));
+            await foreach (var ev in handle.FetchHistoryEventsAsync(
+                new WorkflowHistoryEventFetchOptions { Rpc = Rpc(cancellationToken) }).WithCancellation(cancellationToken))
+            {
+                events.Add(ev);
+                if (events.Count >= limit)
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Failed to fetch history for motion view {WorkflowId}/{RunId}", workflowId, runId);
+        }
+
+        return events;
+    }
+
+    private static IReadOnlyList<WorkflowMotionSegment> ExtractActivitySegments(
+        string workflowId,
+        string runId,
+        IReadOnlyList<HistoryEvent> events,
+        DateTimeOffset now)
+    {
+        var activities = new Dictionary<long, ActivityMotionBuilder>();
+
+        foreach (var ev in events.OrderBy(e => e.EventId))
+        {
+            var timestamp = ToDateTimeOffset(ev.EventTime?.ToDateTime());
+            if (timestamp == DateTimeOffset.MinValue)
+            {
+                timestamp = now;
+            }
+
+            switch (ev.EventType)
+            {
+                case EventType.ActivityTaskScheduled:
+                {
+                    var attrs = ev.ActivityTaskScheduledEventAttributes;
+                    var activityId = ReadString(attrs, "ActivityId");
+                    var activityType = ReadString(attrs, "ActivityType", "Name");
+                    activities[ev.EventId] = new ActivityMotionBuilder
+                    {
+                        ScheduledEventId = ev.EventId,
+                        ActivityId = string.IsNullOrWhiteSpace(activityId) ? $"activity-{ev.EventId}" : activityId,
+                        ActivityType = string.IsNullOrWhiteSpace(activityType) ? "Activity" : activityType,
+                        ScheduledAt = timestamp,
+                        StartEventId = ev.EventId,
+                        Status = OpsWorkflowStatus.Running,
+                    };
+                    break;
+                }
+                case EventType.ActivityTaskStarted:
+                {
+                    var scheduledId = ReadLong(ev.ActivityTaskStartedEventAttributes, "ScheduledEventId");
+                    if (activities.TryGetValue(scheduledId, out var activity))
+                    {
+                        activity.StartedAt ??= timestamp;
+                    }
+                    break;
+                }
+                case EventType.ActivityTaskCompleted:
+                case EventType.ActivityTaskFailed:
+                case EventType.ActivityTaskTimedOut:
+                case EventType.ActivityTaskCanceled:
+                {
+                    var attrs = GetEventAttributes(ev);
+                    var scheduledId = ReadLong(attrs, "ScheduledEventId");
+                    if (activities.TryGetValue(scheduledId, out var activity))
+                    {
+                        activity.EndedAt = timestamp;
+                        activity.EndEventId = ev.EventId;
+                        activity.Status = ev.EventType switch
+                        {
+                            EventType.ActivityTaskCompleted => OpsWorkflowStatus.Completed,
+                            EventType.ActivityTaskFailed => OpsWorkflowStatus.Failed,
+                            EventType.ActivityTaskTimedOut => OpsWorkflowStatus.TimedOut,
+                            EventType.ActivityTaskCanceled => OpsWorkflowStatus.Cancelled,
+                            _ => OpsWorkflowStatus.Running,
+                        };
+                        activity.Details = CompactEventDetails(attrs);
+                    }
+                    break;
+                }
+            }
+        }
+
+        return activities.Values
+            .Select(a => new WorkflowMotionSegment
+            {
+                Id = $"activity-{a.ScheduledEventId}",
+                LaneId = "activities",
+                Kind = "activity",
+                Label = a.ActivityType,
+                Details = string.IsNullOrWhiteSpace(a.Details)
+                    ? $"Activity ID: {a.ActivityId}"
+                    : $"Activity ID: {a.ActivityId} / {a.Details}",
+                Status = a.Status,
+                StartTime = a.StartedAt ?? a.ScheduledAt,
+                EndTime = a.EndedAt ?? now,
+                StartEventId = a.StartEventId,
+                EndEventId = a.EndEventId,
+                WorkflowId = workflowId,
+                RunId = runId,
+                IsCurrent = a.EndedAt is null,
+                IsProblem = IsProblemStatus(a.Status),
+                IsWaiting = a.StartedAt is null && a.EndedAt is null,
+                DisplayLevel = 2,
+            })
+            .Where(s => s.EndTime >= s.StartTime)
+            .ToList();
+    }
+
+    private static IReadOnlyList<WorkflowMotionSegment> ExtractChildWorkflowSegments(
+        string parentWorkflowId,
+        string parentRunId,
+        IReadOnlyList<HistoryEvent> events,
+        DateTimeOffset now)
+    {
+        var childrenByInitiatedId = new Dictionary<long, ChildWorkflowMotionBuilder>();
+        var childrenByWorkflowId = new Dictionary<string, ChildWorkflowMotionBuilder>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ev in events.OrderBy(e => e.EventId))
+        {
+            var timestamp = ToDateTimeOffset(ev.EventTime?.ToDateTime());
+            if (timestamp == DateTimeOffset.MinValue)
+            {
+                timestamp = now;
+            }
+
+            switch (ev.EventType)
+            {
+                case EventType.StartChildWorkflowExecutionInitiated:
+                {
+                    var attrs = ev.StartChildWorkflowExecutionInitiatedEventAttributes;
+                    var childWorkflowId = ReadString(attrs, "WorkflowId");
+                    var childType = ReadString(attrs, "WorkflowType", "Name");
+                    var child = new ChildWorkflowMotionBuilder
+                    {
+                        InitiatedEventId = ev.EventId,
+                        WorkflowId = childWorkflowId,
+                        WorkflowType = string.IsNullOrWhiteSpace(childType) ? "Child workflow" : childType,
+                        StartedAt = timestamp,
+                        StartEventId = ev.EventId,
+                        Status = OpsWorkflowStatus.Running,
+                    };
+                    childrenByInitiatedId[ev.EventId] = child;
+                    if (!string.IsNullOrWhiteSpace(childWorkflowId))
+                    {
+                        childrenByWorkflowId[childWorkflowId] = child;
+                    }
+                    break;
+                }
+                case EventType.ChildWorkflowExecutionStarted:
+                {
+                    var attrs = ev.ChildWorkflowExecutionStartedEventAttributes;
+                    var initiatedId = ReadLong(attrs, "InitiatedEventId");
+                    var childWorkflowId = ReadString(attrs, "WorkflowExecution", "WorkflowId");
+                    var childRunId = ReadString(attrs, "WorkflowExecution", "RunId");
+                    var childType = ReadString(attrs, "WorkflowType", "Name");
+                    var child = GetOrCreateChildBuilder(childrenByInitiatedId, childrenByWorkflowId, initiatedId, childWorkflowId);
+                    child.WorkflowId = string.IsNullOrWhiteSpace(child.WorkflowId) ? childWorkflowId : child.WorkflowId;
+                    child.RunId = childRunId;
+                    child.WorkflowType = string.IsNullOrWhiteSpace(child.WorkflowType) ? childType : child.WorkflowType;
+                    child.StartedAt ??= timestamp;
+                    child.StartEventId = child.StartEventId == 0 ? ev.EventId : child.StartEventId;
+                    child.Status = OpsWorkflowStatus.Running;
+                    break;
+                }
+                case EventType.ChildWorkflowExecutionCompleted:
+                case EventType.ChildWorkflowExecutionFailed:
+                case EventType.ChildWorkflowExecutionTimedOut:
+                case EventType.ChildWorkflowExecutionCanceled:
+                case EventType.ChildWorkflowExecutionTerminated:
+                {
+                    var attrs = GetEventAttributes(ev);
+                    var initiatedId = ReadLong(attrs, "InitiatedEventId");
+                    var childWorkflowId = ReadString(attrs, "WorkflowExecution", "WorkflowId");
+                    var childRunId = ReadString(attrs, "WorkflowExecution", "RunId");
+                    var child = GetOrCreateChildBuilder(childrenByInitiatedId, childrenByWorkflowId, initiatedId, childWorkflowId);
+                    child.WorkflowId = string.IsNullOrWhiteSpace(child.WorkflowId) ? childWorkflowId : child.WorkflowId;
+                    child.RunId = string.IsNullOrWhiteSpace(child.RunId) ? childRunId : child.RunId;
+                    child.EndedAt = timestamp;
+                    child.EndEventId = ev.EventId;
+                    child.Status = ev.EventType switch
+                    {
+                        EventType.ChildWorkflowExecutionCompleted => OpsWorkflowStatus.Completed,
+                        EventType.ChildWorkflowExecutionFailed => OpsWorkflowStatus.Failed,
+                        EventType.ChildWorkflowExecutionTimedOut => OpsWorkflowStatus.TimedOut,
+                        EventType.ChildWorkflowExecutionCanceled => OpsWorkflowStatus.Cancelled,
+                        EventType.ChildWorkflowExecutionTerminated => OpsWorkflowStatus.Terminated,
+                        _ => OpsWorkflowStatus.Running,
+                    };
+                    child.Details = CompactEventDetails(attrs);
+                    break;
+                }
+            }
+        }
+
+        return childrenByInitiatedId.Values
+            .Concat(childrenByWorkflowId.Values)
+            .GroupBy(c => !string.IsNullOrWhiteSpace(c.WorkflowId) ? c.WorkflowId : c.InitiatedEventId.ToString(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(c => c.StartedAt ?? DateTimeOffset.MinValue).First())
+            .Select(c => new WorkflowMotionSegment
+            {
+                Id = $"child-{SafeId(c.WorkflowId)}-{c.InitiatedEventId}",
+                LaneId = "children",
+                Kind = "child",
+                Label = string.IsNullOrWhiteSpace(c.WorkflowId) ? c.WorkflowType : c.WorkflowId,
+                Details = string.IsNullOrWhiteSpace(c.Details)
+                    ? $"{c.WorkflowType} / parent {parentWorkflowId}/{ShortId(parentRunId)}"
+                    : $"{c.WorkflowType} / {c.Details}",
+                Status = c.Status,
+                StartTime = c.StartedAt ?? now,
+                EndTime = c.EndedAt ?? now,
+                StartEventId = c.StartEventId,
+                EndEventId = c.EndEventId,
+                WorkflowId = c.WorkflowId,
+                RunId = c.RunId,
+                IsCurrent = c.EndedAt is null,
+                IsProblem = IsProblemStatus(c.Status),
+                IsWaiting = c.EndedAt is null,
+                DisplayLevel = 1,
+            })
+            .Where(s => s.EndTime >= s.StartTime)
+            .ToList();
+    }
+
+    private static IReadOnlyList<WorkflowMotionMarker> ExtractWorkflowMarkers(string laneId, IReadOnlyList<HistoryEvent> events)
+    {
+        var markers = new List<WorkflowMotionMarker>();
+        foreach (var ev in events)
+        {
+            var eventType = ev.EventType.ToString();
+            if (!IsMotionMarkerEvent(eventType))
+            {
+                continue;
+            }
+
+            var timestamp = ToDateTimeOffset(ev.EventTime?.ToDateTime());
+            if (timestamp == DateTimeOffset.MinValue)
+            {
+                continue;
+            }
+
+            var markerLane = laneId;
+            if (eventType.Contains("ChildWorkflow", StringComparison.OrdinalIgnoreCase))
+            {
+                markerLane = "children";
+            }
+            else if (eventType.Contains("Activity", StringComparison.OrdinalIgnoreCase) || eventType.Contains("Timer", StringComparison.OrdinalIgnoreCase))
+            {
+                markerLane = "activities";
+            }
+
+            markers.Add(new WorkflowMotionMarker
+            {
+                Id = $"marker-{ev.EventId}",
+                LaneId = markerLane,
+                Kind = MarkerKind(eventType),
+                Label = MotionEventLabel(eventType),
+                Details = CompactEventDetails(GetEventAttributes(ev)),
+                Timestamp = timestamp,
+                EventId = ev.EventId,
+                IsProblem = eventType.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                    || eventType.Contains("TimedOut", StringComparison.OrdinalIgnoreCase)
+                    || eventType.Contains("Terminated", StringComparison.OrdinalIgnoreCase),
+                DisplayLevel = eventType.Contains("WorkflowExecution", StringComparison.OrdinalIgnoreCase) ? 1 : 2,
+            });
+        }
+
+        return markers;
+    }
+
+    private static IReadOnlyList<WorkflowMotionMarker> ExtractOperationalMarkers(IReadOnlyList<HistoryEvent> events)
+    {
+        return events
+            .Where(ev => IsOperationalMarkerEvent(ev.EventType.ToString()))
+            .Select(ev => new WorkflowMotionMarker
+            {
+                Id = $"operator-{ev.EventId}",
+                LaneId = "operator-events",
+                Kind = MarkerKind(ev.EventType.ToString()),
+                Label = MotionEventLabel(ev.EventType.ToString()),
+                Details = CompactEventDetails(GetEventAttributes(ev)),
+                Timestamp = ToDateTimeOffset(ev.EventTime?.ToDateTime()),
+                EventId = ev.EventId,
+                IsProblem = false,
+                DisplayLevel = 3,
+            })
+            .Where(m => m.Timestamp != DateTimeOffset.MinValue)
+            .ToList();
+    }
+
+    private static void NormalizeMotionLayout(IReadOnlyList<WorkflowMotionLane> lanes, DateTimeOffset start, DateTimeOffset end)
+    {
+        var totalMs = Math.Max(1, (end - start).TotalMilliseconds);
+        foreach (var segment in lanes.SelectMany(l => l.Segments))
+        {
+            var segmentStart = segment.StartTime < start ? start : segment.StartTime;
+            var segmentEnd = segment.EndTime <= segment.StartTime ? segment.StartTime.AddMilliseconds(1) : segment.EndTime;
+            segmentEnd = segmentEnd > end ? end : segmentEnd;
+            segment.OffsetPercent = ClampPercent((decimal)((segmentStart - start).TotalMilliseconds / totalMs * 100));
+            segment.WidthPercent = Math.Max(0.65m, ClampPercent((decimal)((segmentEnd - segmentStart).TotalMilliseconds / totalMs * 100)));
+        }
+
+        foreach (var marker in lanes.SelectMany(l => l.Markers))
+        {
+            marker.OffsetPercent = ClampPercent((decimal)((marker.Timestamp - start).TotalMilliseconds / totalMs * 100));
+        }
+    }
+
+    private static IReadOnlyList<WorkflowMotionFinding> BuildMotionFindings(
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowRunSummary> runs,
+        IReadOnlyList<WorkflowMotionSegment> childSegments,
+        IReadOnlyList<WorkflowMotionSegment> activitySegments,
+        IReadOnlyList<WorkflowMotionMarker> problemMarkers,
+        DateTimeOffset now)
+    {
+        var findings = new List<WorkflowMotionFinding>();
+        var failedChildren = childSegments.Where(s => s.IsProblem).ToList();
+        var failedActivities = activitySegments.Where(s => s.IsProblem).ToList();
+        var oldestRunning = runs
+            .Where(r => r.Status == OpsWorkflowStatus.Running)
+            .OrderBy(r => r.StartedAt)
+            .FirstOrDefault();
+
+        if (IsProblemStatus(summary.Status))
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Critical,
+                Title = "Workflow closed abnormally",
+                Description = $"The current grouped workflow status is {summary.Status}.",
+                RecommendedAction = "Open the first failing segment, confirm business impact, then decide between reset, cancellation, or manual recovery.",
+            });
+        }
+
+        if (failedChildren.Count > 0)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.High,
+                Title = "Child workflow failure detected",
+                Description = $"{failedChildren.Count} child workflow segment(s) are failed, timed out, cancelled, or terminated.",
+                RecommendedAction = "Review the child workflow lane first; downstream failures usually define the real business impact.",
+                EventId = failedChildren.First().EndEventId == 0 ? null : failedChildren.First().EndEventId,
+            });
+        }
+
+        if (failedActivities.Count > 0)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.High,
+                Title = "Activity failure or timeout detected",
+                Description = $"{failedActivities.Count} activity segment(s) require attention.",
+                RecommendedAction = "Check worker health and external dependencies before retrying or resetting the workflow.",
+                EventId = failedActivities.First().EndEventId == 0 ? null : failedActivities.First().EndEventId,
+            });
+        }
+
+        if (oldestRunning is not null && now - oldestRunning.StartedAt > TimeSpan.FromMinutes(30))
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = summary.Risk >= RiskLevel.High ? RiskLevel.High : RiskLevel.Medium,
+                Title = "Long-running execution",
+                Description = $"The current run has been open for {(now - oldestRunning.StartedAt).TotalMinutes:N0} minutes.",
+                RecommendedAction = "Verify this duration is expected for the business process. If not, check pending activities and worker backlog.",
+            });
+        }
+
+        if (runs.Count >= 10)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Medium,
+                Title = "Large Continue-As-New chain",
+                Description = $"This workflow has {runs.Count} runs in the same Workflow ID chain.",
+                RecommendedAction = "Confirm the chain is an expected compaction pattern, not an unintended loop.",
+            });
+        }
+
+        if (problemMarkers.Count > 0 && findings.Count == 0)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Medium,
+                Title = "Problem marker detected",
+                Description = "One or more problem events appear in the history.",
+                RecommendedAction = "Inspect the highlighted marker and compare it with the activity/child lanes.",
+                EventId = problemMarkers.First().EventId,
+            });
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Low,
+                Title = "No urgent anomaly detected",
+                Description = "The grouped execution appears operationally healthy based on status, child workflows, and major activities.",
+                RecommendedAction = "Continue monitoring. Use operator actions only when there is a business-approved reason.",
+            });
+        }
+
+        return findings
+            .OrderByDescending(f => f.Severity)
+            .ThenBy(f => f.Title, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToList();
+    }
+
+    private static string BuildCurrentState(
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowRunSummary> runs,
+        IReadOnlyList<WorkflowMotionSegment> activities,
+        IReadOnlyList<WorkflowMotionSegment> children,
+        DateTimeOffset now)
+    {
+        if (IsProblemStatus(summary.Status))
+        {
+            return $"Closed abnormally as {summary.Status}.";
+        }
+
+        var currentRun = runs.FirstOrDefault(r => r.IsCurrent) ?? runs.OrderByDescending(r => r.StartedAt).FirstOrDefault();
+        var runningActivity = activities
+            .Where(a => a.IsCurrent)
+            .OrderByDescending(a => a.StartTime)
+            .FirstOrDefault();
+        var runningChild = children
+            .Where(c => c.IsCurrent)
+            .OrderByDescending(c => c.StartTime)
+            .FirstOrDefault();
+
+        if (runningChild is not null)
+        {
+            return $"Waiting on child workflow {runningChild.Label}.";
+        }
+
+        if (runningActivity is not null)
+        {
+            var minutes = Math.Max(0, (now - runningActivity.StartTime).TotalMinutes);
+            return $"Running activity {runningActivity.Label} for {minutes:N0} minutes.";
+        }
+
+        if (currentRun is not null && currentRun.Status == OpsWorkflowStatus.Running)
+        {
+            return $"Current run {ShortId(currentRun.RunId)} is running.";
+        }
+
+        return $"Latest status is {summary.Status}.";
+    }
+
+    private static string BuildBusinessImpact(
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowMotionSegment> childSegments,
+        IReadOnlyList<WorkflowMotionSegment> activitySegments)
+    {
+        if (summary.Risk >= RiskLevel.Critical)
+        {
+            return "Critical operational impact. Management attention and documented recovery decision are recommended.";
+        }
+
+        if (summary.Risk == RiskLevel.High)
+        {
+            return "Potential business impact. Review failed or delayed downstream work before taking action.";
+        }
+
+        if (childSegments.Any(s => s.IsProblem))
+        {
+            return "Downstream impact is possible because one or more child workflows ended abnormally.";
+        }
+
+        if (activitySegments.Any(s => s.IsProblem))
+        {
+            return "Limited impact may exist around a failing activity or external dependency.";
+        }
+
+        return "No immediate business impact is visible from the grouped execution.";
+    }
+
+    private static string BuildRecommendedAction(
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowMotionFinding> findings,
+        IReadOnlyList<WorkflowMotionSegment> childSegments,
+        IReadOnlyList<WorkflowMotionSegment> activitySegments,
+        IReadOnlyList<WorkflowRunSummary> runs)
+    {
+        var top = findings.OrderByDescending(f => f.Severity).FirstOrDefault();
+        if (top is not null && top.Severity >= RiskLevel.High)
+        {
+            return top.RecommendedAction;
+        }
+
+        if (summary.Status == OpsWorkflowStatus.Running && runs.Count > 1)
+        {
+            return "Confirm the current run is progressing. Continue-As-New history is normal only when each run advances business state.";
+        }
+
+        if (summary.Status == OpsWorkflowStatus.Running)
+        {
+            return "Monitor pending activities and worker backlog. Escalate only if the workflow stops making progress.";
+        }
+
+        return top?.RecommendedAction ?? "No immediate operator action is required.";
+    }
+
+    private static bool IsOperationalMarkerEvent(string eventType)
+    {
+        return eventType.Contains("Signaled", StringComparison.OrdinalIgnoreCase)
+            || eventType.Contains("Timer", StringComparison.OrdinalIgnoreCase)
+            || eventType.Contains("Update", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsMotionMarkerEvent(string eventType)
+    {
+        if (eventType.Contains("WorkflowTask", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (eventType.Contains("ChildWorkflow", StringComparison.OrdinalIgnoreCase) ||
+            eventType.Contains("StartChildWorkflow", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (eventType.Contains("Activity", StringComparison.OrdinalIgnoreCase))
+        {
+            return eventType.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("TimedOut", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Canceled", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (eventType.Contains("WorkflowExecution", StringComparison.OrdinalIgnoreCase))
+        {
+            return eventType.Contains("ContinuedAsNew", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Completed", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("TimedOut", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Terminated", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Canceled", StringComparison.OrdinalIgnoreCase)
+                || eventType.Contains("Signaled", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return eventType.Contains("Timer", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MarkerKind(string eventType)
+    {
+        if (eventType.Contains("ContinuedAsNew", StringComparison.OrdinalIgnoreCase)) return "continue";
+        if (eventType.Contains("ChildWorkflow", StringComparison.OrdinalIgnoreCase)) return "child";
+        if (eventType.Contains("Activity", StringComparison.OrdinalIgnoreCase)) return "activity";
+        if (eventType.Contains("Timer", StringComparison.OrdinalIgnoreCase)) return "timer";
+        if (eventType.Contains("Signal", StringComparison.OrdinalIgnoreCase)) return "signal";
+        if (eventType.Contains("Failed", StringComparison.OrdinalIgnoreCase) || eventType.Contains("TimedOut", StringComparison.OrdinalIgnoreCase)) return "problem";
+        return "workflow";
+    }
+
+    private static string MotionEventLabel(string eventType)
+    {
+        return eventType
+            .Replace("StartChildWorkflowExecution", "Child ", StringComparison.OrdinalIgnoreCase)
+            .Replace("ChildWorkflowExecution", "Child ", StringComparison.OrdinalIgnoreCase)
+            .Replace("WorkflowExecution", "Workflow ", StringComparison.OrdinalIgnoreCase)
+            .Replace("ActivityTask", "Activity ", StringComparison.OrdinalIgnoreCase)
+            .Replace("ContinuedAsNew", "Continued As New", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+    }
+
+    private static ChildWorkflowMotionBuilder GetOrCreateChildBuilder(
+        Dictionary<long, ChildWorkflowMotionBuilder> byInitiatedId,
+        Dictionary<string, ChildWorkflowMotionBuilder> byWorkflowId,
+        long initiatedId,
+        string workflowId)
+    {
+        if (initiatedId > 0 && byInitiatedId.TryGetValue(initiatedId, out var byEvent))
+        {
+            return byEvent;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workflowId) && byWorkflowId.TryGetValue(workflowId, out var byWorkflow))
+        {
+            if (initiatedId > 0)
+            {
+                byInitiatedId[initiatedId] = byWorkflow;
+            }
+            return byWorkflow;
+        }
+
+        var child = new ChildWorkflowMotionBuilder
+        {
+            InitiatedEventId = initiatedId,
+            WorkflowId = workflowId,
+            WorkflowType = "Child workflow",
+            Status = OpsWorkflowStatus.Running,
+        };
+
+        if (initiatedId > 0)
+        {
+            byInitiatedId[initiatedId] = child;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workflowId))
+        {
+            byWorkflowId[workflowId] = child;
+        }
+
+        return child;
+    }
+
+    private static object? GetEventAttributes(HistoryEvent ev)
+    {
+        var eventType = ev.EventType.ToString();
+        var propertyName = eventType + "EventAttributes";
+        var prop = ev.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        return prop?.GetValue(ev);
+    }
+
+    private static string ReadString(object? value, params string[] path)
+    {
+        var result = ReadNested(value, path);
+        return result?.ToString() ?? string.Empty;
+    }
+
+    private static long ReadLong(object? value, params string[] path)
+    {
+        var result = ReadNested(value, path);
+        return result switch
+        {
+            long l => l,
+            int i => i,
+            uint ui => ui,
+            ulong ul when ul <= long.MaxValue => (long)ul,
+            string s when long.TryParse(s, out var parsed) => parsed,
+            _ => 0,
+        };
+    }
+
+    private static object? ReadNested(object? value, params string[] path)
+    {
+        var current = value;
+        foreach (var name in path)
+        {
+            if (current is null)
+            {
+                return null;
+            }
+
+            var prop = current.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            current = prop?.GetValue(current);
+        }
+
+        return current;
+    }
+
+    private static bool IsProblemStatus(OpsWorkflowStatus status) => status is
+        OpsWorkflowStatus.Failed or
+        OpsWorkflowStatus.TimedOut or
+        OpsWorkflowStatus.Terminated or
+        OpsWorkflowStatus.Cancelled;
+
+    private static decimal ClampPercent(decimal value) => Math.Clamp(value, 0m, 100m);
+
+    private static string ShortId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        return value.Length <= 8 ? value : value[..8];
+    }
+
+    private static string SafeId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Guid.NewGuid().ToString("N")[..8];
+        }
+
+        var chars = value.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+        return new string(chars).Trim('-');
+    }
+
+    private sealed class ActivityMotionBuilder
+    {
+        public long ScheduledEventId { get; set; }
+        public string ActivityId { get; set; } = string.Empty;
+        public string ActivityType { get; set; } = string.Empty;
+        public DateTimeOffset ScheduledAt { get; set; }
+        public DateTimeOffset? StartedAt { get; set; }
+        public DateTimeOffset? EndedAt { get; set; }
+        public long StartEventId { get; set; }
+        public long EndEventId { get; set; }
+        public OpsWorkflowStatus Status { get; set; } = OpsWorkflowStatus.Running;
+        public string Details { get; set; } = string.Empty;
+    }
+
+    private sealed class ChildWorkflowMotionBuilder
+    {
+        public long InitiatedEventId { get; set; }
+        public string WorkflowId { get; set; } = string.Empty;
+        public string RunId { get; set; } = string.Empty;
+        public string WorkflowType { get; set; } = string.Empty;
+        public DateTimeOffset? StartedAt { get; set; }
+        public DateTimeOffset? EndedAt { get; set; }
+        public long StartEventId { get; set; }
+        public long EndEventId { get; set; }
+        public OpsWorkflowStatus Status { get; set; } = OpsWorkflowStatus.Running;
+        public string Details { get; set; } = string.Empty;
     }
 
     private async Task<IReadOnlyList<string>> DiscoverTaskQueuesAsync(TemporalClient client, CancellationToken cancellationToken)
@@ -938,6 +1949,22 @@ public sealed class TemporalOperationsService : ITemporalOperationsService
         }
 
         return $"taskQueue={attr.TaskQueue?.Name ?? "-"}, workflowType={attr.WorkflowType?.Name ?? "-"}, input={FormatMessage(attr.Input)}";
+    }
+
+    private static string CompactEventDetails(object? value)
+    {
+        if (value is null)
+        {
+            return "-";
+        }
+
+        if (value is IMessage message)
+        {
+            return CompactEventDetails(message);
+        }
+
+        var text = value.ToString() ?? "-";
+        return text.Length <= 600 ? text : text[..600] + " ...";
     }
 
     private static string CompactEventDetails(IMessage? message)

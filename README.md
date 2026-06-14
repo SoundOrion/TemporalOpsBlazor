@@ -137,3 +137,49 @@ Detail画面でも同じRun chainを確認できます。Signal、Cancel、Termi
 - Runbook URL、インシデントチケット、PagerDutyなどとの連携
 
 本番利用では、このUIからTemporalへ直接接続するのではなく、バックエンドAPIを挟む構成を推奨します。RBAC、監査、承認、レート制御、操作ポリシーをサーバー側で強制できるためです。
+
+## Workflow Motion View
+
+Workflow Detail には `Execution Motion` を追加しています。これはTemporal標準UIのEvent Historyをそのまま複製するのではなく、運用管理者が判断しやすいように **Workflow / Run単位のMotionカード** として表示するビューです。
+
+- Run motion cards: Continue-As-Newでつながる各Runを1枚ずつ表示
+- Child workflow cards: Parentから起動されたChild Workflowを個別カード表示
+- Activities: 各Runの中で発生したActivityを、そのRunカード内に表示
+- Signals / timers: 必要に応じてLevel 3で表示
+- Findings: 長時間実行、失敗、異常なContinue-As-New連鎖などを運用判断向けに表示
+
+再生、停止、スクラブ、問題箇所へのジャンプ、表示粒度切り替えを備えています。全体を1本の巨大なタイムラインに押し込まず、各Workflow/Runで何が起きたかを読める構成にしています。
+
+## Workflow Motion Preview
+
+Workflow一覧では、行を展開すると対象WorkflowのMotion Previewを表示します。
+
+- Continue-As-New Runを1つの巨大なタイムラインに潰さず、各Runを個別のMotionカードとして表示
+- 各Runカード内にActivityの動き、Child Workflow、Operator eventを表示
+- Child Workflowは別Workflowとして扱い、詳細画面へ遷移可能
+- History取得は展開時に遅延実行し、一覧の初期表示負荷を抑制
+
+運用管理者は、一覧画面のまま「どのWorkflow executionが進行中か」「どこで詰まったか」「Child Workflowに波及しているか」を確認できます。
+
+## v13: Workflow Detail navigation policy
+
+画面文言は英語で統一したまま、Workflow Detail の導線を以下の方針に整理しています。
+
+- 一覧の `Details` は Workflow ID 単位の **Grouped Workflow Detail** を開きます。
+- Continue-As-New の各 Run には `Run detail` リンクを表示します。
+- Child Workflow には `Child detail` リンクを表示します。
+- `/workflows/{workflowId}` はグループ全体の運用判断用ページです。
+- `/workflows/{workflowId}/runs/{runId}` は個別 Run の Motion / History を確認するページです。
+
+これにより、管理者はまずグループ全体の状態を見て、必要な Run や Child Workflow へ個別に掘り下げられます。
+
+## v14: Workflow一覧とMotion詳細の導線
+
+Workflow一覧の展開表示は、Continue-As-New run chainをツリー状に表示する軽量ビューに戻しています。
+ここでは各Runの `Status`、`Start Time`、`Close Time`、`History`、`Latency` のみを確認できます。
+
+各Runの `Details` を押すと `/workflows/{workflowId}/runs/{runId}` に遷移し、そのRun単体のMotion Viewを表示します。
+一覧上ではモーションを大量に描画せず、運用者が必要なRunだけを選んで詳細確認できる構成です。
+
+Workflow行本体の `Details` は `/workflows/{workflowId}` に遷移し、Workflow ID全体のGrouped Detailを表示します。
+Grouped Detailでは全体概要とRun navigatorを表示し、各Runのモーション確認はRun Detail側に分離しています。

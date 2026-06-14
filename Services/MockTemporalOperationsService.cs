@@ -136,9 +136,18 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
                 .Where(x => x.WorkflowId.Equals(summary.WorkflowId, StringComparison.OrdinalIgnoreCase)))
                 .FirstOrDefault() ?? summary;
 
+            var detailSummary = groupedSummary;
+            if (!string.IsNullOrWhiteSpace(runId))
+            {
+                var selectedRun = groupedSummary.ContinuationRuns.FirstOrDefault(r =>
+                    string.Equals(r.RunId, summary.RunId, StringComparison.OrdinalIgnoreCase))
+                    ?? ToRunSummary(summary, false);
+                detailSummary = CloneForSingleRun(summary, selectedRun);
+            }
+
             var detail = new WorkflowDetail
             {
-                Summary = groupedSummary,
+                Summary = detailSummary,
                 OpenSignals = ["refreshInventory", "changePriority", "operatorOverride"],
                 InputJson = """
                 {
@@ -155,8 +164,9 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
                   "slaMinutes": 60
                 }
                 """,
-                History = BuildHistory(groupedSummary),
-                ContinuationRuns = groupedSummary.ContinuationRuns
+                History = BuildHistory(detailSummary),
+                ContinuationRuns = groupedSummary.ContinuationRuns,
+                Motion = BuildMotion(detailSummary)
             };
 
             return Task.FromResult<WorkflowDetail?>(detail);
@@ -324,6 +334,31 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         IsCurrent = isCurrent
     };
 
+    private static WorkflowExecutionSummary CloneForSingleRun(WorkflowExecutionSummary source, WorkflowRunSummary selectedRun)
+    {
+        return new WorkflowExecutionSummary
+        {
+            WorkflowId = source.WorkflowId,
+            RunId = selectedRun.RunId,
+            WorkflowType = source.WorkflowType,
+            Status = selectedRun.Status,
+            TaskQueue = string.IsNullOrWhiteSpace(selectedRun.TaskQueue) ? source.TaskQueue : selectedRun.TaskQueue,
+            Namespace = source.Namespace,
+            StartedAt = selectedRun.StartedAt,
+            ClosedAt = selectedRun.ClosedAt,
+            Attempt = source.Attempt,
+            PendingActivities = source.PendingActivities,
+            HistoryLength = selectedRun.HistoryLength,
+            LatencySeconds = selectedRun.LatencySeconds,
+            Risk = source.Risk,
+            Owner = source.Owner,
+            Memo = source.Memo,
+            SearchAttributes = source.SearchAttributes,
+            ContinuationRunCount = 1,
+            ContinuationRuns = [selectedRun],
+        };
+    }
+
     private WorkflowExecutionSummary? FindWorkflow(string workflowId, string runId) =>
         _workflows.FirstOrDefault(x =>
             x.WorkflowId.Equals(workflowId, StringComparison.OrdinalIgnoreCase) &&
@@ -356,6 +391,268 @@ public sealed class MockTemporalOperationsService : ITemporalOperationsService
         new() { Label = "14:00", Value = 77 },
         new() { Label = "15:00", Value = 94 }
     ];
+
+
+    private static WorkflowMotion BuildMotion(WorkflowExecutionSummary summary)
+    {
+        var now = DateTimeOffset.Now;
+        var runs = summary.ContinuationRuns.Count > 0
+            ? summary.ContinuationRuns.OrderBy(r => r.StartedAt).ToList()
+            : new List<WorkflowRunSummary> { ToRunSummary(summary, true) };
+
+        var start = runs.Min(r => r.StartedAt);
+        var end = runs.Select(r => r.ClosedAt ?? now).Max();
+        if (end <= start)
+        {
+            end = start.AddSeconds(1);
+        }
+
+        var root = new WorkflowMotionSegment
+        {
+            Id = "mock-root",
+            LaneId = "workflow",
+            Kind = "workflow",
+            Label = summary.WorkflowType,
+            Details = $"{summary.WorkflowId} / {summary.Status}",
+            Status = summary.Status,
+            StartTime = start,
+            EndTime = end,
+            WorkflowId = summary.WorkflowId,
+            RunId = summary.RunId,
+            IsCurrent = summary.Status == WorkflowStatus.Running,
+            IsProblem = IsProblemStatus(summary.Status),
+            IsWaiting = summary.Status == WorkflowStatus.Running,
+            DisplayLevel = 1
+        };
+
+        var runSegments = runs.Select(run => new WorkflowMotionSegment
+        {
+            Id = $"mock-run-{run.RunId}",
+            LaneId = "run-chain",
+            Kind = "run",
+            Label = ShortRunId(run.RunId),
+            Details = $"{run.Status} / {run.HistoryLength:N0} events / {run.LatencySeconds:N1}s",
+            Status = run.Status,
+            StartTime = run.StartedAt,
+            EndTime = run.ClosedAt ?? now,
+            WorkflowId = run.WorkflowId,
+            RunId = run.RunId,
+            IsCurrent = run.IsCurrent,
+            IsProblem = IsProblemStatus(run.Status),
+            IsWaiting = run.Status == WorkflowStatus.Running,
+            DisplayLevel = 1
+        }).ToList();
+
+        var activitySegments = new List<WorkflowMotionSegment>
+        {
+            new()
+            {
+                Id = "mock-activity-validate",
+                LaneId = "activities",
+                Kind = "activity",
+                Label = "ValidateInput",
+                Details = "Input validation and routing decision.",
+                Status = WorkflowStatus.Completed,
+                StartTime = start.AddSeconds(12),
+                EndTime = start.AddSeconds(35),
+                StartEventId = 8,
+                EndEventId = 16,
+                WorkflowId = summary.WorkflowId,
+                RunId = summary.RunId,
+                DisplayLevel = 2
+            },
+            new()
+            {
+                Id = "mock-activity-provider",
+                LaneId = "activities",
+                Kind = "activity",
+                Label = summary.Risk >= RiskLevel.High ? "ExternalProviderRequest" : "FinalizeOutput",
+                Details = summary.Risk >= RiskLevel.High ? "Retry policy applied after provider error." : "Output persisted successfully.",
+                Status = summary.Risk >= RiskLevel.High ? WorkflowStatus.Failed : WorkflowStatus.Completed,
+                StartTime = start.AddMinutes(2),
+                EndTime = start.AddMinutes(4),
+                StartEventId = 22,
+                EndEventId = 43,
+                WorkflowId = summary.WorkflowId,
+                RunId = summary.RunId,
+                IsProblem = summary.Risk >= RiskLevel.High,
+                DisplayLevel = 2
+            }
+        };
+
+        var childSegments = summary.WorkflowId.Contains("order", StringComparison.OrdinalIgnoreCase)
+            ? new List<WorkflowMotionSegment>
+            {
+                new()
+                {
+                    Id = "mock-child-inventory",
+                    LaneId = "children",
+                    Kind = "child",
+                    Label = "inventory-reservation-child",
+                    Details = "Inventory reservation child workflow.",
+                    Status = WorkflowStatus.Running,
+                    StartTime = now.AddMinutes(-35),
+                    EndTime = now,
+                    WorkflowId = "inventory-reservation-child",
+                    RunId = "child-4b1c9fd0",
+                    IsCurrent = true,
+                    IsWaiting = true,
+                    DisplayLevel = 1
+                }
+            }
+            : new List<WorkflowMotionSegment>();
+
+        var markers = new List<WorkflowMotionMarker>();
+        foreach (var run in runs.Where(r => r.Status == WorkflowStatus.ContinuedAsNew))
+        {
+            markers.Add(new WorkflowMotionMarker
+            {
+                Id = $"mock-continue-{run.RunId}",
+                LaneId = "run-chain",
+                Kind = "continue",
+                Label = "Continued As New",
+                Details = "History compacted into a fresh run.",
+                Timestamp = run.ClosedAt ?? run.StartedAt,
+                IsProblem = false,
+                DisplayLevel = 1
+            });
+        }
+
+        var lanes = new List<WorkflowMotionLane>
+        {
+            new() { Id = "workflow", Title = "Overall execution", Subtitle = "Business-level execution window across all related runs.", Kind = "workflow", DisplayLevel = 1, Segments = [root] },
+            new() { Id = "run-chain", Title = "Continue-As-New run chain", Subtitle = "Same Workflow ID, oldest to newest.", Kind = "run", DisplayLevel = 1, Segments = runSegments, Markers = markers },
+        };
+
+        if (childSegments.Count > 0)
+        {
+            lanes.Add(new WorkflowMotionLane { Id = "children", Title = "Child workflows", Subtitle = "Downstream child workflows started by the parent.", Kind = "child", DisplayLevel = 1, Segments = childSegments });
+        }
+
+        lanes.Add(new WorkflowMotionLane { Id = "activities", Title = "Major activities", Subtitle = "Activities collapsed into operational segments.", Kind = "activity", DisplayLevel = 2, Segments = activitySegments });
+
+        NormalizeMotionLayout(lanes, start, end);
+
+        var findings = BuildMockFindings(summary, childSegments, activitySegments, runs);
+        var problemCount = lanes.SelectMany(l => l.Segments).Count(s => s.IsProblem) + markers.Count(m => m.IsProblem);
+
+        return new WorkflowMotion
+        {
+            WorkflowId = summary.WorkflowId,
+            CurrentRunId = summary.RunId,
+            OverallStatus = summary.Status,
+            Risk = summary.Risk,
+            TimelineStart = start,
+            TimelineEnd = end,
+            TotalDurationSeconds = (decimal)Math.Max(0, (end - start).TotalSeconds),
+            RunCount = runs.Count,
+            ChildWorkflowCount = childSegments.Count,
+            ActivityCount = activitySegments.Count,
+            ProblemCount = problemCount,
+            CurrentState = summary.Status == WorkflowStatus.Running ? "Current run is active." : $"Latest status is {summary.Status}.",
+            BusinessImpact = summary.Risk >= RiskLevel.High ? "Potential business impact. Review highlighted segments before taking action." : "No immediate business impact is visible from the grouped execution.",
+            RecommendedAction = findings.OrderByDescending(f => f.Severity).First().RecommendedAction,
+            Lanes = lanes,
+            Markers = markers,
+            Findings = findings
+        };
+    }
+
+    private static IReadOnlyList<WorkflowMotionFinding> BuildMockFindings(
+        WorkflowExecutionSummary summary,
+        IReadOnlyList<WorkflowMotionSegment> children,
+        IReadOnlyList<WorkflowMotionSegment> activities,
+        IReadOnlyList<WorkflowRunSummary> runs)
+    {
+        var findings = new List<WorkflowMotionFinding>();
+
+        if (IsProblemStatus(summary.Status))
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Critical,
+                Title = "Workflow closed abnormally",
+                Description = $"The grouped workflow status is {summary.Status}.",
+                RecommendedAction = "Confirm business impact, then decide whether reset or manual recovery is appropriate."
+            });
+        }
+
+        if (activities.Any(a => a.IsProblem))
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.High,
+                Title = "Activity failure detected",
+                Description = "A major activity segment ended abnormally.",
+                RecommendedAction = "Check worker health and external dependencies before retrying."
+            });
+        }
+
+        if (runs.Count >= 3)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Medium,
+                Title = "Continue-As-New chain",
+                Description = $"{runs.Count} runs are grouped under the same Workflow ID.",
+                RecommendedAction = "Confirm this is an expected compaction pattern, not an unintended loop."
+            });
+        }
+
+        if (children.Any(c => c.IsCurrent))
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Medium,
+                Title = "Waiting on child workflow",
+                Description = "A child workflow is still running.",
+                RecommendedAction = "Review the child workflow lane before acting on the parent."
+            });
+        }
+
+        if (findings.Count == 0)
+        {
+            findings.Add(new WorkflowMotionFinding
+            {
+                Severity = RiskLevel.Low,
+                Title = "No urgent anomaly detected",
+                Description = "The grouped execution appears operationally healthy.",
+                RecommendedAction = "Continue monitoring."
+            });
+        }
+
+        return findings.OrderByDescending(f => f.Severity).ToList();
+    }
+
+    private static void NormalizeMotionLayout(IReadOnlyList<WorkflowMotionLane> lanes, DateTimeOffset start, DateTimeOffset end)
+    {
+        var totalMs = Math.Max(1, (end - start).TotalMilliseconds);
+        foreach (var segment in lanes.SelectMany(l => l.Segments))
+        {
+            var segmentStart = segment.StartTime < start ? start : segment.StartTime;
+            var segmentEnd = segment.EndTime <= segment.StartTime ? segment.StartTime.AddMilliseconds(1) : segment.EndTime;
+            segmentEnd = segmentEnd > end ? end : segmentEnd;
+            segment.OffsetPercent = Math.Clamp((decimal)((segmentStart - start).TotalMilliseconds / totalMs * 100), 0m, 100m);
+            segment.WidthPercent = Math.Max(0.65m, Math.Clamp((decimal)((segmentEnd - segmentStart).TotalMilliseconds / totalMs * 100), 0m, 100m));
+        }
+
+        foreach (var marker in lanes.SelectMany(l => l.Markers))
+        {
+            marker.OffsetPercent = Math.Clamp((decimal)((marker.Timestamp - start).TotalMilliseconds / totalMs * 100), 0m, 100m);
+        }
+    }
+
+    private static bool IsProblemStatus(WorkflowStatus status) => status is WorkflowStatus.Failed or WorkflowStatus.TimedOut or WorkflowStatus.Terminated or WorkflowStatus.Cancelled;
+
+    private static string ShortRunId(string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId))
+        {
+            return "-";
+        }
+
+        return runId.Length <= 8 ? runId : runId[..8];
+    }
 
     private static IReadOnlyList<WorkflowHistoryEvent> BuildHistory(WorkflowExecutionSummary summary)
     {
